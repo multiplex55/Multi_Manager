@@ -621,7 +621,6 @@ pub fn check_hotkeys(app: &App) {
     }
 }
 
-/// Listens for key input and retrieves the currently active window.
 pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, String)> {
     unsafe {
         MessageBoxW(

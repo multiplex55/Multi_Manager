@@ -20,6 +20,7 @@ pub struct App {
     pub hotkey_promise: Arc<Mutex<Option<Promise<()>>>>,
     pub initial_validation_done: Arc<Mutex<bool>>,
     pub registered_hotkeys: Arc<Mutex<HashMap<String, usize>>>,
+    pub rename_dialog: Option<(usize, String)>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -278,7 +279,7 @@ impl App {
                     let header_text = workspace.get_header_text();
                     let header_id = egui::Id::new(format!("workspace_{}_header", i));
 
-                    egui::CollapsingHeader::new(header_text)
+                    let header_response = egui::CollapsingHeader::new(header_text)
                         .id_salt(header_id)
                         .default_open(true)
                         .show(ui, |ui| {
@@ -294,21 +295,68 @@ impl App {
 
                             self.render_workspace_controls(ui, workspace, &mut context);
                         });
+
+                    // Attach right-click context menu to the header for renaming
+                    header_response.header_response.context_menu(|ui| {
+                        if ui.button("Rename").clicked() {
+                            self.rename_dialog = Some((i, workspace.name.clone()));
+                            ui.close_menu();
+                        }
+                    });
                 }
             });
 
+        // Move workspace up/down if requested
         if let Some(i) = move_up_index {
             let mut workspaces = self.workspaces.lock().unwrap();
             if i > 0 {
                 workspaces.swap(i, i - 1);
             }
         }
-
         if let Some(i) = move_down_index {
             let mut workspaces = self.workspaces.lock().unwrap();
             if i < workspaces.len() - 1 {
                 workspaces.swap(i, i + 1);
             }
+        }
+
+        // Take the dialog state out to avoid borrow conflicts
+        if let Some((index, mut name_buf)) = self.rename_dialog.take() {
+            let mut close_dialog = false;
+            let mut rename_confirmed = false;
+
+            egui::Window::new("Rename Workspace")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.label("Enter new workspace name:");
+                    let text_response = ui.text_edit_singleline(&mut name_buf);
+
+                    if text_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        rename_confirmed = true;
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.button("OK").clicked() {
+                            rename_confirmed = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close_dialog = true;
+                        }
+                    });
+                });
+
+            if rename_confirmed {
+                let mut workspaces = self.workspaces.lock().unwrap();
+                if let Some(ws) = workspaces.get_mut(index) {
+                    ws.name = name_buf;
+                }
+                // Dialog stays closed
+            } else if !close_dialog {
+                // User neither confirmed nor cancelled, so put dialog state back
+                self.rename_dialog = Some((index, name_buf));
+            }
+            // else: Dialog cancelled, don't put it back
         }
     }
 
