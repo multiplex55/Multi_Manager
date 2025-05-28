@@ -1,27 +1,36 @@
 use crate::gui::App;
 use crate::workspace::Workspace;
-use log::{error, info, warn};
+use log::{info, warn};
+use std::time::Instant;
 use windows::core::{Result, PCWSTR};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-/// Checks if a hotkey is pressed based on the key sequence string.
+/// Determines if a given hotkey combination is currently being pressed on the keyboard.
 ///
-/// # Arguments
-/// - `key_sequence`: The key sequence string (e.g., "Ctrl+Alt+H") to check.
+/// # Behavior
+/// - Splits the `key_sequence` (e.g. `"Ctrl+Alt+H"`) by `'+'`.
+/// - Interprets certain tokens (`"ctrl"`, `"alt"`, `"shift"`, `"win"`) as modifier keys, checking each modifier’s state via `GetAsyncKeyState`.
+/// - Identifies the main key (e.g. `"H"`) from `virtual_key_from_string(...)`.
+/// - Returns `true` if **all** modifiers **and** the main key are pressed simultaneously, else `false`.
 ///
-/// # Returns
-/// - `true` if the hotkey is currently pressed.
-/// - `false` otherwise.
+/// # Side Effects
+/// - Uses the Win32 API call [`GetAsyncKeyState`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate) to check the state of each key (only valid on Windows).
+/// - If `virtual_key_from_string` fails (unknown key), the function returns `false`.
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// if is_hotkey_pressed("Ctrl+Shift+P") {
-///     println!("Hotkey pressed!");
+///     println!("Ctrl+Shift+P is currently held down!");
 /// }
 /// ```
+///
+/// # Notes
+/// - This function checks **live** key states; it should be polled in a loop or a timer if you’re monitoring for repeated presses.
+/// - Frequently used inside the main hotkey checking loop (`check_hotkeys`).
+/// - Case-insensitive for the tokens `Ctrl`, `Alt`, `Shift`, `Win`.
 pub fn is_hotkey_pressed(key_sequence: &str) -> bool {
     let mut modifiers_pressed = true;
     let mut vk_code: Option<u32> = None;
@@ -52,112 +61,29 @@ pub fn is_hotkey_pressed(key_sequence: &str) -> bool {
     }
 }
 
-/// Registers a global hotkey for a workspace.
+/// Toggles the **positions** of all windows in a `Workspace` between their **home** and **target** locations.
 ///
-/// # Arguments
-/// - `app`: Reference to the `App` struct for tracking registered hotkeys.
-/// - `id`: The unique identifier for the hotkey.
-/// - `key_sequence`: The key sequence string (e.g., "Ctrl+Alt+H") to register.
+/// # Behavior
+/// - Calls `are_all_windows_at_home(workspace)` to determine if every window is at its home position.
+///   - If **all** are at home, the function moves each valid window to its `target`.
+///   - Otherwise, it attempts to move each valid window **back to its home** position.
+/// - Restores minimized windows (via `ShowWindow(..., SW_RESTORE)`) before moving them.
+/// - Activates each window (via `SetForegroundWindow`) after movement completes.
 ///
-/// # Returns
-/// - `true` if the hotkey was successfully registered.
-/// - `false` otherwise.
-///
-/// # Example
-/// ```
-/// if register_hotkey(1, "Ctrl+Shift+P") {
-///     println!("Hotkey registered!");
-/// }
-/// ```
-pub fn register_hotkey(app: &App, id: i32, key_sequence: &str) -> bool {
-    // Check if the hotkey is already registered
-    let registered_hotkeys = app.registered_hotkeys.lock().unwrap();
-    if registered_hotkeys.contains_key(key_sequence) {
-        // warn!("Hotkey '{}' is already registered.", key_sequence);
-        return false;
-    }
-    drop(registered_hotkeys); // Release lock early
-
-    // Proceed with normal registration
-    let mut modifiers: u32 = 0;
-    let mut vk_code: Option<u32> = None;
-
-    for part in key_sequence.split('+') {
-        match part.to_lowercase().as_str() {
-            "ctrl" => modifiers |= MOD_CONTROL.0,
-            "alt" => modifiers |= MOD_ALT.0,
-            "shift" => modifiers |= MOD_SHIFT.0,
-            "win" => modifiers |= MOD_WIN.0,
-            _ => {
-                vk_code = virtual_key_from_string(part);
-            }
-        }
-    }
-
-    if let Some(vk) = vk_code {
-        unsafe {
-            if RegisterHotKey(None, id, HOT_KEY_MODIFIERS(modifiers), vk).is_ok() {
-                // Update the registered hotkeys map
-                let mut registered_hotkeys = app.registered_hotkeys.lock().unwrap();
-                registered_hotkeys.insert(key_sequence.to_string(), id as usize);
-
-                info!("Registered hotkey '{}' with ID {}.", key_sequence, id);
-                return true;
-            } else {
-                error!("Failed to register hotkey: '{}'.", key_sequence);
-            }
-        }
-    } else {
-        warn!("Invalid hotkey sequence: '{}'.", key_sequence);
-    }
-
-    false
-}
-
-/// Unregisters a global hotkey based on its ID.
-///
-/// # Arguments
-/// - `app`: Reference to the `App` struct for tracking registered hotkeys.
-/// - `id`: The unique identifier of the hotkey to unregister.
+/// # Side Effects
+/// - Issues multiple Win32 API calls for restoring/minimizing, moving, and activating windows.
+/// - Logs actions and warnings (e.g., if a window is invalid or fails to move).
 ///
 /// # Example
+/// ```rust
+/// // If all windows are at home, move them to target; otherwise back to home.
+/// toggle_workspace_windows(&mut my_workspace);
 /// ```
-/// unregister_hotkey(&app, 1);
-/// ```
-pub fn unregister_hotkey(app: &App, id: i32) {
-    unsafe {
-        if UnregisterHotKey(None, id).is_ok() {
-            info!("Successfully unregistered hotkey with ID {}.", id);
-
-            // First, find the key associated with the ID
-            let key_to_remove = {
-                let registered_hotkeys = app.registered_hotkeys.lock().unwrap();
-                registered_hotkeys
-                    .iter()
-                    .find(|(_, &v)| v == id as usize)
-                    .map(|(key, _)| key.clone()) // Clone the key to avoid borrowing issues
-            };
-
-            // Now remove the key from the map if it exists
-            if let Some(key) = key_to_remove {
-                let mut registered_hotkeys = app.registered_hotkeys.lock().unwrap();
-                registered_hotkeys.remove(&key);
-                info!("Removed hotkey '{}' from the registry.", key);
-            }
-        } else {
-            warn!("Failed to unregister hotkey with ID {}.", id);
-        }
-    }
-}
-
-/// Checks if all valid windows in a workspace are at their home positions.
 ///
-/// # Arguments
-/// - `workspace`: The workspace whose windows are being checked.
-///
-/// # Returns
-/// - `true` if all valid windows are at their home positions.
-/// - `false` otherwise.
+/// # Notes
+/// - If a window is minimized (iconic), it is restored before being positioned.
+/// - Invalid windows (where `IsWindow(hwnd)` returns false) are skipped and logged with a warning.
+/// - This function is often bound to a hotkey press and invoked by `check_hotkeys()`.
 pub fn are_all_windows_at_home(workspace: &Workspace) -> bool {
     workspace.windows.iter().filter(|w| w.valid).all(|w| {
         let hwnd = HWND(w.id as *mut std::ffi::c_void);
@@ -239,23 +165,31 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
     }
 }
 
-/// Checks if a window is at the specified position.
+/// Determines whether the specified `hwnd` is currently located at the given **(x, y)** coordinates
+/// with the specified **width** and **height**.
 ///
-/// # Arguments
-/// - `hwnd`: The handle to the window.
-/// - `x`, `y`: The top-left coordinates of the position.
-/// - `w`, `h`: The width and height of the position.
+/// # Behavior
+/// - Retrieves the window’s current position and size using
+///   [`get_window_position`](#fn.get_window_position).
+/// - Compares the returned `(x, y, width, height)` tuple to the provided parameters.
+/// - Returns `true` if they match exactly, otherwise `false`.
 ///
-/// # Returns
-/// - `true` if the window matches the specified position.
-/// - `false` otherwise.
+/// # Side Effects
+/// - Calls `get_window_position`, which uses the Win32 API [`GetWindowRect`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
+///   to retrieve the actual window rectangle on screen.
 ///
 /// # Example
-/// ```
-/// if is_window_at_position(hwnd, 0, 0, 800, 600) {
-///     println!("Window is at the correct position.");
+/// ```rust
+/// if is_window_at_position(hwnd, 100, 100, 800, 600) {
+///     println!("The window is exactly at (100, 100) with size (800x600).");
+/// } else {
+///     println!("The window is not at the specified position/size.");
 /// }
 /// ```
+///
+/// # Notes
+/// - If `get_window_position` fails or returns an error, this function returns `false`.
+/// - Primarily used internally (e.g., in `are_all_windows_at_home`).
 fn is_window_at_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> bool {
     if let Ok((wx, wy, ww, wh)) = get_window_position(hwnd) {
         wx == x && wy == y && ww == w && wh == h
@@ -266,19 +200,46 @@ fn is_window_at_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> bool {
 
 /// Retrieves the current position and size of a window.
 ///
-/// # Arguments
-/// - `hwnd`: The handle to the window.
+/// This function uses the Win32 API `GetWindowRect` to obtain the coordinates of the window's
+/// bounding rectangle. It calculates the width and height from the `RECT` structure and returns
+/// the position and size of the window as a tuple.
 ///
-/// # Returns
-/// - A tuple `(x, y, width, height)` representing the window's position and size.
-/// - `Err` if the window position cannot be retrieved.
+/// # Behavior
+/// - If the window handle (`hwnd`) is valid, the function returns a tuple of `(x, y, width, height)`.
+/// - If the window handle is invalid or the call to `GetWindowRect` fails, an error is returned.
 ///
 /// # Example
-/// ```
-/// if let Ok((x, y, w, h)) = get_window_position(hwnd) {
-///     println!("Window position: ({}, {}, {}, {})", x, y, w, h);
+/// ```rust
+/// use windows::Win32::Foundation::HWND;
+///
+/// let hwnd = HWND(12345 as *mut _); // Example HWND
+/// match get_window_position(hwnd) {
+///     Ok((x, y, w, h)) => println!("Window position: ({}, {}, {}, {})", x, y, w, h),
+///     Err(err) => println!("Failed to get window position: {}", err),
 /// }
 /// ```
+///
+/// # Dependencies
+/// - Calls the `GetWindowRect` function from the Win32 API to retrieve the window's rectangle.
+///
+/// # Returns
+/// - `Ok((x, y, width, height))`: If the window's position and size are successfully retrieved.
+/// - `Err(windows::core::Error)`: If the `GetWindowRect` API call fails or the window handle is invalid.
+///
+/// # Parameters
+/// - `hwnd: HWND`: The handle to the window whose position and size are being queried.
+///
+/// # Side Effects
+/// - None.
+///
+/// # Error Conditions
+/// - Returns an error if the `hwnd` is invalid or the `GetWindowRect` API call fails.
+///
+/// # Notes
+/// - Ensure the `hwnd` passed to this function is valid before calling.
+///
+/// # Win32 API Reference
+/// - [`GetWindowRect`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
 pub fn get_window_position(hwnd: HWND) -> Result<(i32, i32, i32, i32)> {
     unsafe {
         let mut rect = RECT::default();
@@ -295,21 +256,30 @@ pub fn get_window_position(hwnd: HWND) -> Result<(i32, i32, i32, i32)> {
     }
 }
 
-/// Converts a string to a virtual key code.
+/// Converts a textual key identifier (e.g. `"A"`, `"F1"`, `"Ctrl"`) into its corresponding Windows **virtual key code**.
 ///
-/// # Arguments
-/// - `key`: The key string (e.g., "A", "F1", "Ctrl").
+/// # Behavior
+/// - Matches the input `key` (converted to uppercase) against a predefined list of known key names (e.g. `"F1"`, `"NUMPAD0"`, `"LEFTALT"`, etc.).
+/// - Returns the matching `u32` virtual key code if recognized, or `None` if the `key` is unrecognized.
+/// - Handles a wide variety of function, alphanumeric, numpad, arrow, and special keys.
+/// - Case-insensitive for recognized tokens.
 ///
-/// # Returns
-/// - The virtual key code as `Option<u32>`.
+/// # Side Effects
+/// - None directly, but used by functions such as `is_hotkey_pressed` or `Hotkey::register` to map textual keys into numeric codes.
 ///
 /// # Example
-/// ```
-/// if let Some(vk) = virtual_key_from_string("Ctrl") {
-///     println!("Virtual key code: {}", vk);
+/// ```rust
+/// if let Some(vk_code) = virtual_key_from_string("F5") {
+///     println!("Virtual key code for F5 is: 0x{:X}", vk_code);
+/// } else {
+///     println!("Unrecognized key.");
 /// }
 /// ```
-fn virtual_key_from_string(key: &str) -> Option<u32> {
+///
+/// # Notes
+/// - Missing or incorrect keys (e.g. `"F27"` or `"SomeRandomKey"`) will yield `None`.
+/// - This helps unify string-based user input with the numeric values required for Win32 API calls.
+pub fn virtual_key_from_string(key: &str) -> Option<u32> {
     match key.to_uppercase().as_str() {
         // Function keys
         "F1" => Some(0x70),
@@ -447,18 +417,35 @@ fn virtual_key_from_string(key: &str) -> Option<u32> {
     }
 }
 
-/// Retrieves the currently active window and its title.
+/// Retrieves the **currently active window** (foreground window) along with its **title**.
 ///
-/// # Returns
-/// - A tuple `(HWND, String)` representing the active window's handle and title.
-/// - `None` if no active window is found.
+/// # Behavior
+/// - Calls the Win32 API function [`GetForegroundWindow`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getforegroundwindow)
+///   to get a handle (`HWND`) to the active window.
+/// - If the call returns a valid window handle, it then retrieves the window’s title text via
+///   [`GetWindowTextW`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowtextw).
+/// - Converts the raw UTF-16 buffer into a Rust `String`.
+/// - Returns `Some((HWND, String))` if successful, or `None` if no active window is found.
+///
+/// # Side Effects
+/// - Accesses the Windows API for window management, which is only available on Windows.
+/// - Logs a warning if no active window is detected (using the `log` crate).
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// if let Some((hwnd, title)) = get_active_window() {
-///     println!("Active window: {} ({:?})", title, hwnd);
+///     println!("Active window is: '{}' (HWND: {:?})", title, hwnd);
+/// } else {
+///     println!("No active window detected.");
 /// }
 /// ```
+///
+/// # Error Conditions
+/// - Returns `None` if `GetForegroundWindow` returns a eull pointer (no active window).
+///
+/// # Notes
+/// - The window title length is capped at 256 characters in this function due to the fixed buffer size.
+/// - Only intended for use in a Windows environment.
 pub fn get_active_window() -> Option<(HWND, String)> {
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -475,23 +462,31 @@ pub fn get_active_window() -> Option<(HWND, String)> {
     }
 }
 
-/// Moves a window to a specific position and size.
+/// Repositions and resizes a window identified by `hwnd` to the coordinates `(x, y)` with dimensions `(w, h)`.
 ///
-/// # Arguments
-/// - `hwnd`: The handle to the window.
-/// - `x`, `y`: The new top-left position of the window.
-/// - `w`, `h`: The new width and height of the window.
+/// # Behavior
+/// - Invokes the Win32 API call [`SetWindowPos`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos)
+///   to move the specified window to the new location and size.
+/// - Maintains the window’s Z-order by using `SWP_NOZORDER`.
+/// - Returns `Ok(())` if the operation succeeds, or a Windows error wrapped in `Err` on failure.
 ///
-/// # Returns
-/// - `Ok(())` if the window was successfully moved.
-/// - `Err` otherwise.
+/// # Side Effects
+/// - Logs the action using the `log` crate (`info!`), including the new position and size.
+/// - Potentially changes the visible arrangement of the desktop if the window is on screen.
 ///
 /// # Example
-/// ```
+/// ```no_run
 /// if let Err(e) = move_window(hwnd, 100, 100, 800, 600) {
-///     println!("Failed to move window: {}", e);
+///     eprintln!("Could not move the window: {}", e);
 /// }
 /// ```
+///
+/// # Error Conditions
+/// - Returns a `windows::core::Error` if the underlying Win32 call fails (e.g., invalid `HWND`).
+///
+/// # Notes
+/// - Typically called within `toggle_workspace_windows` and during manual “Move to Home/Target” user actions.
+/// - Only valid on Windows, where `SetWindowPos` is available.
 pub fn move_window(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Result<()> {
     unsafe {
         SetWindowPos(hwnd, HWND_TOP, x, y, w, h, SWP_NOZORDER)?;
@@ -503,18 +498,39 @@ pub fn move_window(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Result<()> {
     }
 }
 
-/// Listens for key input to confirm or cancel an action.
+/// Displays a dialog message prompting the user to press **Enter** or **Esc**, and upon Enter,
+/// also retrieves the **currently active window** (its handle and title).
 ///
-/// # Returns
-/// - `"Enter"` if the Enter key is pressed.
-/// - `"Esc"` if the Escape key is pressed.
+/// # Behavior
+/// - Calls `MessageBoxW` with an informational prompt:  
+///   _“Press Enter to confirm or Escape to cancel.”_
+/// - Loops, polling key states via `GetAsyncKeyState`.
+/// - If the **Enter** key is detected:
+///   - Fetches the active window with [`get_active_window`](#fn.get_active_window).
+///   - Returns `Some(("Enter", HWND, String))` if an active window exists.
+///   - If no active window is found, returns `None`.
+/// - If the **Esc** key is detected, returns `None`.
+///
+/// # Side Effects
+/// - Blocks execution until the user presses Enter or Escape.
+/// - Shows a Windows dialog box and reads from the OS key state in real time.
+/// - Logs a warning if no active window is found when Enter is pressed.
 ///
 /// # Example
-/// ```
-/// if let Some(action) = listen_for_keys_with_dialog() {
-///     println!("User selected action: {}", action);
+/// ```no_run
+/// if let Some((action, hwnd, title)) = listen_for_keys_with_dialog_and_window() {
+///     match action {
+///         "Enter" => println!("Window '{}' (HWND: {:?}) captured!", title, hwnd),
+///         _       => println!("Unexpected action!"),
+///     }
+/// } else {
+///     println!("User canceled or no active window found.");
 /// }
 /// ```
+///
+/// # Notes
+/// - Only available on Windows, as it relies on the native message box and key state APIs.
+/// - Useful for quickly capturing which window is active at the moment the user presses Enter.
 pub fn listen_for_keys_with_dialog() -> Option<&'static str> {
     unsafe {
         let message = "Press Enter to confirm or Escape to cancel.";
@@ -548,4 +564,95 @@ pub fn listen_for_keys_with_dialog() -> Option<&'static str> {
             }
         }
     }
+}
+
+/// Periodically checks for **pressed hotkeys** across all workspaces and toggles the associated workspace windows if matched.
+///
+/// # Behavior
+/// - Locks the `workspaces` from the `app` to iterate over each `Workspace`.
+/// - Skips any workspace that is marked `disabled`.
+/// - For each workspace with a valid `hotkey`, calls `is_hotkey_pressed(...)`.
+///   - If true, **collects** that workspace’s index in a local list (`workspaces_to_toggle`).
+/// - After releasing the lock, toggles windows for each collected workspace via `toggle_workspace_windows(...)`.
+/// - Updates `last_hotkey_info` for any triggered hotkey, capturing the sequence and a timestamp.
+///
+/// # Side Effects
+/// - May call Win32 API functions through `is_hotkey_pressed` (for checking key states) and `toggle_workspace_windows` (for re-positioning windows).
+/// - Logs details about which hotkey was activated.
+/// - Typically runs in a background thread loop (`Promise::spawn_thread`), sleeping a bit between checks.
+///
+/// # Example
+/// ```no_run
+/// // In a loop or thread, we might do:
+/// loop {
+///     check_hotkeys(&app);
+///     std::thread::sleep(std::time::Duration::from_millis(100));
+/// }
+/// ```
+///
+/// # Notes
+/// - This function is central to the application’s hotkey-based workspace toggling.
+/// - Must be invoked repeatedly (e.g., via a timed loop) to capture newly pressed keys.
+pub fn check_hotkeys(app: &App) {
+    let mut workspaces_to_toggle = Vec::new();
+    let workspaces = app.workspaces.lock().unwrap();
+
+    for (i, workspace) in workspaces.iter().enumerate() {
+        if workspace.disabled {
+            continue;
+        }
+
+        if let Some(ref hotkey) = workspace.hotkey {
+            if is_hotkey_pressed(&hotkey.key_sequence) {
+                workspaces_to_toggle.push(i);
+                let mut last_hotkey_info = app.last_hotkey_info.lock().unwrap();
+                *last_hotkey_info = Some((hotkey.key_sequence.clone(), Instant::now()));
+            }
+        }
+    }
+
+    drop(workspaces); // Release lock before toggling
+
+    let mut workspaces = app.workspaces.lock().unwrap();
+    for index in workspaces_to_toggle {
+        if let Some(workspace) = workspaces.get_mut(index) {
+            toggle_workspace_windows(workspace);
+        }
+    }
+}
+
+pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, String)> {
+    unsafe {
+        MessageBoxW(
+            None,
+            PCWSTR(
+                "Press Enter to confirm or Escape to cancel."
+                    .encode_utf16()
+                    .chain(Some(0))
+                    .collect::<Vec<_>>()
+                    .as_ptr(),
+            ),
+            PCWSTR(
+                "Action Required"
+                    .encode_utf16()
+                    .chain(Some(0))
+                    .collect::<Vec<_>>()
+                    .as_ptr(),
+            ),
+            MB_OK | MB_ICONINFORMATION,
+        );
+
+        loop {
+            if GetAsyncKeyState(VK_RETURN.0 as i32) < 0 {
+                if let Some((hwnd, title)) = get_active_window() {
+                    return Some(("Enter", hwnd, title));
+                }
+                break;
+            }
+            if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 {
+                break;
+            }
+        }
+    }
+    None
 }

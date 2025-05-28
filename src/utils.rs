@@ -3,21 +3,31 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-/// Displays a message box with the specified message and title.
+/// Determines whether the specified `hwnd` is currently located at the given **(x, y)** coordinates
+/// with the specified **width** and **height**.
 ///
-/// This function is used to show informational messages to the user.
+/// # Behavior
+/// - Retrieves the window’s current position and size using
+///   [`get_window_position`](#fn.get_window_position).
+/// - Compares the returned `(x, y, width, height)` tuple to the provided parameters.
+/// - Returns `true` if they match exactly, otherwise `false`.
 ///
-/// # Arguments
-/// - `message`: The content of the message to be displayed.
-/// - `title`: The title of the message box.
+/// # Side Effects
+/// - Calls `get_window_position`, which uses the Win32 API [`GetWindowRect`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowrect)
+///   to retrieve the actual window rectangle on screen.
 ///
 /// # Example
-/// ```
-/// show_message_box("Operation successful!", "Info");
+/// ```rust
+/// if is_window_at_position(hwnd, 100, 100, 800, 600) {
+///     println!("The window is exactly at (100, 100) with size (800x600).");
+/// } else {
+///     println!("The window is not at the specified position/size.");
+/// }
 /// ```
 ///
-/// # Platform-Specific Notes
-/// - This function uses the Windows API, so it is only supported on Windows.
+/// # Notes
+/// - If `get_window_position` fails or returns an error, this function returns `false`.
+/// - Primarily used internally (e.g., in `are_all_windows_at_home`).
 pub fn show_message_box(message: &str, title: &str) {
     unsafe {
         MessageBoxW(
@@ -41,29 +51,34 @@ pub fn show_message_box(message: &str, title: &str) {
     }
 }
 
-/// Displays a confirmation dialog box with "Yes" and "No" options.
+/// Displays a **modal confirmation dialog** with “Yes” and “No” buttons, returning `true` if the user clicks “Yes,”
+/// or `false` if they click “No” (or close the dialog).
 ///
-/// This function prompts the user for confirmation and returns `true` if "Yes" is clicked.
+/// # Behavior
+/// - Uses the Win32 API [`MessageBoxW`](https://learn.microsoft.com/en-us/windows/winuser/nf-winuser-messageboxw)
+///   with the flags `MB_YESNO | MB_ICONQUESTION`.
+/// - Presents a question-mark icon and waits for user interaction.
+/// - Returns a boolean:
+///   - `true` if the user chooses “Yes”.
+///   - `false` if the user chooses “No” or if the call fails for any reason.
 ///
-/// # Arguments
-/// - `message`: The content of the confirmation message.
-/// - `title`: The title of the confirmation dialog box.
-///
-/// # Returns
-/// - `true` if the user selects "Yes".
-/// - `false` if the user selects "No".
+/// # Side Effects
+/// - Blocks until the user dismisses the dialog.
+/// - Shows a native Windows message box on the screen, capturing the user’s response.
 ///
 /// # Example
-/// ```
-/// if show_confirmation_box("Are you sure?", "Confirm Action") {
-///     println!("User confirmed!");
+/// ```no_run
+/// if show_confirmation_box("Are you sure you want to continue?", "Confirm Action") {
+///     println!("User clicked Yes.");
 /// } else {
-///     println!("User declined.");
+///     println!("User clicked No or closed the dialog.");
 /// }
 /// ```
 ///
-/// # Platform-Specific Notes
-/// - This function uses the Windows API, so it is only supported on Windows.
+/// # Notes
+/// - This function is **Windows-specific** due to its use of the native message box API.
+/// - For an informational or one-button dialog, use
+///   [`show_message_box`](#fn.show_message_box) instead.
 pub fn show_confirmation_box(message: &str, title: &str) -> bool {
     unsafe {
         let result = MessageBoxW(
