@@ -324,13 +324,10 @@ impl App {
                             self.render_workspace_controls(ui, workspace, &mut context);
                         });
 
-                    // Attach right-click context menu to the header for renaming
-                    header_inner.response.context_menu(|ui| {
-                        if ui.button("Rename").clicked() {
-                            self.rename_dialog = Some((i, workspace.name.clone()));
-                            ui.close_menu();
-                        }
-                    });
+                    // Open the rename dialog directly on right-click
+                    if header_inner.response.clicked_by(egui::PointerButton::Secondary) {
+                        self.rename_dialog = Some((i, workspace.name.clone()));
+                    }
                 }
             });
 
