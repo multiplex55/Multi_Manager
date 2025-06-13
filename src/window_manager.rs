@@ -165,6 +165,60 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
     }
 }
 
+/// Moves all valid windows in a `Workspace` to their defined **home** positions.
+///
+/// # Behavior
+/// - Restores minimized windows before moving them.
+/// - Uses [`move_window`](fn.move_window.html) to reposition each window.
+/// - Attempts to activate each window after it has been moved.
+///
+/// # Parameters
+/// - `workspace`: The workspace whose windows should be returned home.
+pub fn send_workspace_windows_home(workspace: &Workspace) {
+    for window in &workspace.windows {
+        let hwnd = HWND(window.id as *mut std::ffi::c_void);
+
+        unsafe {
+            if !IsWindow(hwnd).as_bool() {
+                warn!(
+                    "Skipping invalid window '{}' in workspace '{}'.",
+                    window.title, workspace.name
+                );
+                continue;
+            }
+
+            if IsIconic(hwnd).as_bool() {
+                if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
+                    warn!("Failed to restore minimized window '{}'.", window.title);
+                } else {
+                    info!("Restored minimized window '{}'.", window.title);
+                }
+            }
+        }
+
+        if let Err(e) = move_window(hwnd, window.home.0, window.home.1, window.home.2, window.home.3) {
+            warn!("Failed to move window '{}': {}", window.title, e);
+        } else {
+            info!("Moved window '{}' to home position: {:?}", window.title, window.home);
+        }
+
+        unsafe {
+            if SetForegroundWindow(hwnd).as_bool() {
+                info!("Activated window '{}'", window.title);
+            } else {
+                warn!("Failed to activate window '{}'", window.title);
+            }
+        }
+    }
+}
+
+/// Iterates over every workspace and sends each of their windows to the `home` position.
+pub fn send_all_windows_home(workspaces: &mut [Workspace]) {
+    for workspace in workspaces.iter() {
+        send_workspace_windows_home(workspace);
+    }
+}
+
 /// Determines whether the specified `hwnd` is currently located at the given **(x, y)** coordinates
 /// with the specified **width** and **height**.
 ///
