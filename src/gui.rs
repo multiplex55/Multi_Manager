@@ -301,7 +301,7 @@ impl App {
                         state.set_open(expand);
                     }
 
-                    let header_response = state
+                    let (toggle_response, mut header_inner, _) = state
                         .show_header(ui, |ui| {
                             ui.label(header_text);
                         })
@@ -320,7 +320,7 @@ impl App {
                         });
 
                     // Attach right-click context menu to the header for renaming
-                    header_response.header_response.response.context_menu(|ui| {
+                    header_inner.response.context_menu(|ui| {
                         if ui.button("Rename").clicked() {
                             self.rename_dialog = Some((i, workspace.name.clone()));
                             ui.close_menu();
