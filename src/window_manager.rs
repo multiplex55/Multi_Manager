@@ -107,59 +107,87 @@ pub fn are_all_windows_at_home(workspace: &Workspace) -> bool {
 /// toggle_workspace_windows(&mut workspace);
 /// ```
 pub fn toggle_workspace_windows(workspace: &mut Workspace) {
-    let all_at_home = are_all_windows_at_home(workspace);
-    info!("DEBUG all_at_home {}", all_at_home);
+    if workspace.rotate && workspace.windows.len() > 1 {
+        let len = workspace.windows.len();
+        let target_idx = workspace.current_index % len;
 
-    for window in &workspace.windows {
-        let hwnd = HWND(window.id as *mut std::ffi::c_void);
+        for (i, window) in workspace.windows.iter().enumerate() {
+            let hwnd = HWND(window.id as *mut std::ffi::c_void);
 
-        // Check if the window is valid
-        unsafe {
-            if !IsWindow(hwnd).as_bool() {
-                warn!("Skipping invalid window '{}'.", window.title);
-                continue;
+            unsafe {
+                if !IsWindow(hwnd).as_bool() {
+                    warn!("Skipping invalid window '{}'.", window.title);
+                    continue;
+                }
+                if IsIconic(hwnd).as_bool() {
+                    if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
+                        warn!("Failed to restore minimized window '{}'.", window.title);
+                    } else {
+                        info!("Restored minimized window '{}'.", window.title);
+                    }
+                }
             }
-        }
 
-        unsafe {
-            if IsIconic(hwnd).as_bool() {
-                if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
-                    warn!("Failed to restore minimized window '{}'.", window.title);
-                } else {
-                    info!("Restored minimized window '{}'.", window.title);
+            let position = if i == target_idx { window.target } else { window.home };
+
+            if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
+                warn!("Failed to move window '{}': {}", window.title, e);
+            } else {
+                info!("Moved window '{}' to position: {:?}", window.title, position);
+            }
+
+            if i == target_idx {
+                unsafe {
+                    if SetForegroundWindow(hwnd).as_bool() {
+                        info!("Activated window '{}'", window.title);
+                    } else {
+                        warn!("Failed to activate window '{}'", window.title);
+                    }
                 }
             }
         }
+        workspace.current_index = (workspace.current_index + 1) % len;
+    } else {
+        let all_at_home = are_all_windows_at_home(workspace);
+        info!("DEBUG all_at_home {}", all_at_home);
 
-        let target_position = if all_at_home {
-            window.target
-        } else {
-            window.home
-        };
-
-        // Move the window
-        if let Err(e) = move_window(
-            HWND(window.id as *mut std::ffi::c_void),
-            target_position.0,
-            target_position.1,
-            target_position.2,
-            target_position.3,
-        ) {
-            warn!("Failed to move window '{}': {}", window.title, e);
-        } else {
-            info!(
-                "Moved window '{}' to position: {:?}",
-                window.title, target_position
-            );
-        }
-
-        // Activate the window
-        unsafe {
+        for window in &workspace.windows {
             let hwnd = HWND(window.id as *mut std::ffi::c_void);
-            if SetForegroundWindow(hwnd).as_bool() {
-                info!("Activated window '{}'", window.title);
+
+            unsafe {
+                if !IsWindow(hwnd).as_bool() {
+                    warn!("Skipping invalid window '{}'.", window.title);
+                    continue;
+                }
+                if IsIconic(hwnd).as_bool() {
+                    if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
+                        warn!("Failed to restore minimized window '{}'.", window.title);
+                    } else {
+                        info!("Restored minimized window '{}'.", window.title);
+                    }
+                }
+            }
+
+            let target_position = if all_at_home { window.target } else { window.home };
+
+            if let Err(e) = move_window(
+                hwnd,
+                target_position.0,
+                target_position.1,
+                target_position.2,
+                target_position.3,
+            ) {
+                warn!("Failed to move window '{}': {}", window.title, e);
             } else {
-                warn!("Failed to activate window '{}'", window.title);
+                info!("Moved window '{}' to position: {:?}", window.title, target_position);
+            }
+
+            unsafe {
+                if SetForegroundWindow(hwnd).as_bool() {
+                    info!("Activated window '{}'", window.title);
+                } else {
+                    warn!("Failed to activate window '{}'", window.title);
+                }
             }
         }
     }
