@@ -308,7 +308,13 @@ impl App {
 
                     let (toggle_response, mut header_inner, _) = state
                         .show_header(ui, |ui| {
-                            ui.label(header_text);
+                            let label_response = ui.label(header_text);
+                            label_response.context_menu(|ui| {
+                                if ui.button("Rename").clicked() {
+                                    self.rename_dialog = Some((i, workspace.name.clone()));
+                                    ui.close_menu();
+                                }
+                            });
                         })
                         .body(|ui| {
                             workspace.render_details(ui);
