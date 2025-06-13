@@ -230,6 +230,8 @@ impl App {
                     windows: Vec::new(),
                     disabled: false,
                     valid: false,
+                    rotate: false,
+                    current_index: 0,
                 });
             }
             if ui.button("Send All Home").clicked() {

@@ -27,6 +27,10 @@ pub struct Workspace {
     pub windows: Vec<Window>,
     pub disabled: bool,
     pub valid: bool,
+    #[serde(default)]
+    pub rotate: bool,
+    #[serde(skip)]
+    pub current_index: usize,
 }
 
 impl Workspace {
@@ -137,6 +141,8 @@ impl Workspace {
                 );
             }
         });
+
+        ui.checkbox(&mut self.rotate, "Rotate Windows");
 
         // Create a copy of windows for iteration
         let windows: Vec<_> = self.windows.iter_mut().collect();
@@ -634,6 +640,7 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
                                 );
                             }
                         }
+                        workspace.current_index = 0;
                     }
 
                     workspaces
