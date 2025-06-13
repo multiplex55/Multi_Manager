@@ -306,7 +306,7 @@ impl App {
                         state.set_open(expand);
                     }
 
-                    let (toggle_response, mut header_inner, _) = state
+                    let (_toggle_response, mut header_inner, _) = state
                         .show_header(ui, |ui| {
                             ui.label(header_text);
                         })
