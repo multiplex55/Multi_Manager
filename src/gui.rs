@@ -306,7 +306,7 @@ impl App {
                         state.set_open(expand);
                     }
 
-                    let (toggle_response, mut header_inner, _) = state
+                    let (_toggle_response, mut header_inner, _) = state
                         .show_header(ui, |ui| {
                             let label_response = ui.label(header_text);
                             label_response.context_menu(|ui| {
@@ -330,13 +330,10 @@ impl App {
                             self.render_workspace_controls(ui, workspace, &mut context);
                         });
 
-                    // Attach right-click context menu to the header for renaming
-                    header_inner.response.context_menu(|ui| {
-                        if ui.button("Rename").clicked() {
-                            self.rename_dialog = Some((i, workspace.name.clone()));
-                            ui.close_menu();
-                        }
-                    });
+                    // Open the rename dialog directly on right-click
+                    if header_inner.response.clicked_by(egui::PointerButton::Secondary) {
+                        self.rename_dialog = Some((i, workspace.name.clone()));
+                    }
                 }
             });
 
@@ -388,6 +385,9 @@ impl App {
                 if let Some(ws) = workspaces.get_mut(index) {
                     ws.name = name_buf;
                 }
+                drop(workspaces); // release lock before saving to avoid deadlocks
+                // Persist the updated name to disk
+                self.save_workspaces();
                 // Dialog stays closed
             } else if !close_dialog {
                 // User neither confirmed nor cancelled, so put dialog state back
