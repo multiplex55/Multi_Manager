@@ -56,6 +56,8 @@ fn main() {
         initial_validation_done: Arc::new(Mutex::new(false)), // Initialize flag to false
         registered_hotkeys: Arc::new(Mutex::new(HashMap::new())), // Initialize the map
         rename_dialog: None,
+        all_expanded: true,
+        expand_all_signal: None,
     };
 
     // Launch GUI and set the taskbar icon after creating the window
