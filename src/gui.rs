@@ -382,6 +382,9 @@ impl App {
                 if let Some(ws) = workspaces.get_mut(index) {
                     ws.name = name_buf;
                 }
+                drop(workspaces); // release lock before saving to avoid deadlocks
+                // Persist the updated name to disk
+                self.save_workspaces();
                 // Dialog stays closed
             } else if !close_dialog {
                 // User neither confirmed nor cancelled, so put dialog state back
