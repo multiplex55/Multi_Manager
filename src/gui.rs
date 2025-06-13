@@ -2,6 +2,7 @@ use crate::utils::*;
 use crate::window_manager::check_hotkeys;
 use crate::workspace::*;
 use eframe::egui;
+use eframe::egui::collapsing_header::CollapsingState;
 use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
@@ -21,6 +22,8 @@ pub struct App {
     pub initial_validation_done: Arc<Mutex<bool>>,
     pub registered_hotkeys: Arc<Mutex<HashMap<String, usize>>>,
     pub rename_dialog: Option<(usize, String)>,
+    pub all_expanded: bool,
+    pub expand_all_signal: Option<bool>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -208,7 +211,7 @@ impl App {
     /// # Notes
     /// - The new workspace is initialized with a default name based on the current number of workspaces.
     fn render_header(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         save_flag: &mut bool,
         new_workspace: &mut Option<Workspace>,
@@ -228,6 +231,15 @@ impl App {
                     disabled: false,
                     valid: false,
                 });
+            }
+            let label = if self.all_expanded {
+                "Collapse All"
+            } else {
+                "Expand All"
+            };
+            if ui.button(label).clicked() {
+                self.all_expanded = !self.all_expanded;
+                self.expand_all_signal = Some(self.all_expanded);
             }
         });
     }
@@ -279,10 +291,21 @@ impl App {
                     let header_text = workspace.get_header_text();
                     let header_id = egui::Id::new(format!("workspace_{}_header", i));
 
-                    let header_response = egui::CollapsingHeader::new(header_text)
-                        .id_salt(header_id)
-                        .default_open(true)
-                        .show(ui, |ui| {
+                    let mut state =
+                        egui::collapsing_header::CollapsingState::load_with_default_open(
+                            ui.ctx(),
+                            header_id,
+                            true,
+                        );
+                    if let Some(expand) = self.expand_all_signal {
+                        state.set_open(expand);
+                    }
+
+                    let header_response = state
+                        .show_header(ui, |ui| {
+                            ui.label(header_text);
+                        })
+                        .body(|ui| {
                             workspace.render_details(ui);
 
                             let mut context = WorkspaceControlContext {
@@ -297,7 +320,7 @@ impl App {
                         });
 
                     // Attach right-click context menu to the header for renaming
-                    header_response.header_response.context_menu(|ui| {
+                    header_response.header_response.response.context_menu(|ui| {
                         if ui.button("Rename").clicked() {
                             self.rename_dialog = Some((i, workspace.name.clone()));
                             ui.close_menu();
@@ -305,6 +328,9 @@ impl App {
                     });
                 }
             });
+
+        // Reset expand_all_signal after use
+        self.expand_all_signal = None;
 
         // Move workspace up/down if requested
         if let Some(i) = move_up_index {

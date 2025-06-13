@@ -344,8 +344,9 @@ impl Workspace {
     pub fn validate_workspace(&mut self) {
         self.valid = {
             let hotkey_valid = self
-            .hotkey
-            .as_ref().is_some_and(|hotkey| is_valid_key_combo(&hotkey.key_sequence));
+                .hotkey
+                .as_ref()
+                .is_some_and(|hotkey| is_valid_key_combo(&hotkey.key_sequence));
             let any_valid_window = self.windows.iter().any(|window| unsafe {
                 IsWindow(HWND(window.id as *mut std::ffi::c_void)).as_bool()
             });
@@ -354,7 +355,7 @@ impl Workspace {
         };
     }
 }
-/// Presents egui UI elements for configuring **one** `Window`’s positioning data: 
+/// Presents egui UI elements for configuring **one** `Window`’s positioning data:
 /// its **Home** and **Target** coordinates, plus actions to **capture** or **move** the window.
 ///
 /// # Behavior
