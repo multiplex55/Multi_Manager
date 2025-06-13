@@ -1,5 +1,5 @@
 use crate::utils::*;
-use crate::window_manager::check_hotkeys;
+use crate::window_manager::{check_hotkeys, send_all_windows_home};
 use crate::workspace::*;
 use eframe::egui;
 use eframe::egui::collapsing_header::CollapsingState;
@@ -231,6 +231,9 @@ impl App {
                     disabled: false,
                     valid: false,
                 });
+            }
+            if ui.button("Send All Home").clicked() {
+                self.send_all_home();
             }
             let label = if self.all_expanded {
                 "Collapse All"
@@ -553,6 +556,12 @@ impl App {
     fn delete_workspace(&self, index: usize) {
         let mut workspaces = self.workspaces.lock().unwrap();
         workspaces.remove(index);
+    }
+
+    /// Sends every window in all workspaces back to its configured home position.
+    fn send_all_home(&self) {
+        let mut workspaces = self.workspaces.lock().unwrap();
+        send_all_windows_home(&mut workspaces);
     }
 
     /// Validates and registers hotkeys for all workspaces during initialization.
