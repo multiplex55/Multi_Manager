@@ -150,13 +150,23 @@ impl Workspace {
         ui.checkbox(&mut self.rotate, "Rotate Windows");
 
         // Create a copy of windows for iteration
+        let windows_len = self.windows.len();
         let windows: Vec<_> = self.windows.iter_mut().collect();
         let mut window_to_delete = None;
+        let mut move_up_index: Option<usize> = None;
+        let mut move_down_index: Option<usize> = None;
 
         for (i, window) in windows.into_iter().enumerate() {
             ui.horizontal(|ui| {
                 // Display window title
                 ui.label(&window.title);
+
+                if i > 0 && ui.button("Move ⏶").clicked() {
+                    move_up_index = Some(i);
+                }
+                if i < windows_len - 1 && ui.button("Move ⏷").clicked() {
+                    move_down_index = Some(i);
+                }
 
                 // Add delete button
                 if ui.button("Delete").clicked() {
@@ -235,6 +245,17 @@ impl Workspace {
             });
             // Render controls for individual window
             render_window_controls(ui, window);
+        }
+
+        if let Some(i) = move_up_index {
+            if i > 0 {
+                self.windows.swap(i, i - 1);
+            }
+        }
+        if let Some(i) = move_down_index {
+            if i < self.windows.len() - 1 {
+                self.windows.swap(i, i + 1);
+            }
         }
 
         if let Some(index) = window_to_delete {
