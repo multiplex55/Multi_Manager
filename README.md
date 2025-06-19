@@ -17,6 +17,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
   - Save "Home" and "Target" window positions.
   - Move windows between "Home" and "Target" positions.
 - **Hotkey Support**: Assign global hotkeys to workspaces for quick activation.
+- **Hotkey Display**: The workspace title shows the assigned hotkey (e.g., `Workspace 1 - F13`) and updates automatically when you rename the workspace or change its hotkey.
 - **Validation System**:
   - Validate hotkey configurations at startup and during updates.
   - Indicate the validity of hotkeys in real-time.
