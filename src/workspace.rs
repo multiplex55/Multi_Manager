@@ -84,12 +84,17 @@ impl Workspace {
     /// - Commonly used in the collapsible headers of each workspace in the UI.
     /// - Helps visually distinguish disabled/invalid workspaces at a glance.
     pub fn get_header_text(&self) -> egui::RichText {
+        let label = match &self.hotkey {
+            Some(hk) => format!("{} - {}", self.name, hk.key_sequence),
+            None => self.name.clone(),
+        };
+
         if self.disabled {
-            egui::RichText::new(&self.name).color(egui::Color32::ORANGE)
+            egui::RichText::new(label).color(egui::Color32::ORANGE)
         } else if self.valid {
-            egui::RichText::new(&self.name).color(egui::Color32::GREEN)
+            egui::RichText::new(label).color(egui::Color32::GREEN)
         } else {
-            egui::RichText::new(&self.name).color(egui::Color32::RED)
+            egui::RichText::new(label).color(egui::Color32::RED)
         }
     }
 
