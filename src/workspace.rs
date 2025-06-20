@@ -123,7 +123,10 @@ impl Workspace {
                 .map(|h| h.key_sequence.clone())
                 .unwrap_or_else(|| "None".to_string());
             let response = ui.text_edit_singleline(&mut temp_hotkey);
-            let reset_clicked = ui.button("Reset").clicked();
+            let mut reset_clicked = false;
+            if self.hotkey.is_some() {
+                reset_clicked = ui.button("Reset").clicked();
+            }
 
             if reset_clicked {
                 self.reset_hotkey(app);
