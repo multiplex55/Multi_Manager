@@ -31,14 +31,15 @@ fn main() {
 
         let mut res = winres::WindowsResource::new();
         res.set_icon(icon_path);
-        // Force failure if embedding fails
-        res.compile()
-            .expect("Failed to embed resources into binary!");
 
-        if let Err(e) = res.compile() {
-            log_to_file(&format!("Failed to compile resources: {}", e));
-        } else {
-            log_to_file("Resource compiled successfully.");
+        match res.compile() {
+            Ok(_) => {
+                log_to_file("Resource compiled successfully.");
+            }
+            Err(e) => {
+                log_to_file(&format!("Failed to compile resources: {}", e));
+                panic!("Failed to embed resources into binary!");
+            }
         }
 
         log_to_file("Finished running build.rs");
