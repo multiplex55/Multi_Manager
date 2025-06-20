@@ -11,8 +11,6 @@ use log::info;
 use crate::settings::load_settings;
 use std::collections::HashMap;
 use std::env;
-use std::fs::File;
-use std::io::Write; // Fix for write_all error
 use std::sync::{Arc, Mutex};
 
 /// The main entry point for the Multi Manager application.
@@ -64,6 +62,7 @@ fn main() {
         expand_all_signal: None,
         show_settings: false,
         save_on_exit: settings.save_on_exit,
+        log_level: settings.log_level.clone(),
     };
 
     // Launch GUI and set the taskbar icon after creating the window
@@ -97,40 +96,33 @@ fn main() {
 /// log::info!("Logging is now initialized and ready.");
 /// ```
 fn ensure_logging_initialized() {
-    // Attempt to initialize logging configuration
-    if let Err(err) = log4rs::init_file("log4rs.yaml", Default::default()) {
-        eprintln!("Failed to initialize log4rs: {}", err);
+    use log::LevelFilter;
+    use log4rs::append::file::FileAppender;
+    use log4rs::config::{Appender, Config, Root};
+    use log4rs::encode::pattern::PatternEncoder;
 
-        // Create a default log4rs.yaml file
-        let default_config = r#"
-appenders:
-  file:
-    kind: file
-    path: "multi_manager.log"
-    append: false
-    encoder:
-      pattern: "{d} - {l} - {m}{n}"
+    let settings = load_settings();
+    let level = match settings.log_level.to_lowercase().as_str() {
+        "trace" => LevelFilter::Trace,
+        "debug" => LevelFilter::Debug,
+        "warn" => LevelFilter::Warn,
+        "error" => LevelFilter::Error,
+        "off" => LevelFilter::Off,
+        _ => LevelFilter::Info,
+    };
 
-root:
-  level: info
-  appenders:
-    - file
-"#;
+    let logfile = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}{n}")))
+        .append(false)
+        .build("multi_manager.log")
+        .expect("failed to create log file");
 
-        if let Err(e) = File::create("log4rs.yaml")
-            .and_then(|mut file| file.write_all(default_config.as_bytes()))
-        {
-            eprintln!("Failed to create default log4rs.yaml: {}", e);
-            std::process::exit(1); // Exit if we cannot create the default configuration
-        }
+    let config = Config::builder()
+        .appender(Appender::builder().build("file", Box::new(logfile)))
+        .build(Root::builder().appender("file").build(level))
+        .expect("failed to build log configuration");
 
-        // Retry initializing log4rs with the newly created configuration file
-        if let Err(e) = log4rs::init_file("log4rs.yaml", Default::default()) {
-            eprintln!(
-                "Failed to reinitialize log4rs with default configuration: {}",
-                e
-            );
-            std::process::exit(1); // Exit if retry fails
-        }
+    if let Err(e) = log4rs::init_config(config) {
+        eprintln!("Failed to initialize logging: {}", e);
     }
 }
