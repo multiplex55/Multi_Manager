@@ -178,6 +178,26 @@ impl EframeApp for App {
             self.render_settings_window(ctx);
         }
     }
+
+    #[cfg(feature = "glow")]
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.save_on_exit {
+            self.save_workspaces();
+        }
+        if let Some(promise) = self.hotkey_promise.lock().unwrap().take() {
+            promise.cancel();
+        }
+    }
+
+    #[cfg(not(feature = "glow"))]
+    fn on_exit(&mut self) {
+        if self.save_on_exit {
+            self.save_workspaces();
+        }
+        if let Some(promise) = self.hotkey_promise.lock().unwrap().take() {
+            promise.cancel();
+        }
+    }
 }
 
 impl App {
