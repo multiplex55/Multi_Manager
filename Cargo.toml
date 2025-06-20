@@ -31,6 +31,11 @@ poll-promise = "0.3.0"
 regex = "1.11.1"
 image = "0.25.5"
 
+[features]
+# Enable `glow` support in sync with `eframe` so trait implementations like
+# `on_exit` match the chosen rendering backend.
+glow = ["eframe/glow"]
+
 [profile.release]
 opt-level = 0
 debug = true

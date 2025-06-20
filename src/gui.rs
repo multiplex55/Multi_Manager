@@ -2,7 +2,6 @@ use crate::utils::*;
 use crate::window_manager::{check_hotkeys, send_all_windows_home};
 use crate::workspace::*;
 use eframe::egui;
-use eframe::egui::collapsing_header::CollapsingState;
 use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
@@ -12,6 +11,27 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Extension trait providing a `cancel` method for `Promise`.
+///
+/// When compiled with the `tokio` feature, this forwards to [`Promise::abort`].
+/// Otherwise it simply drops the promise, allowing any associated thread to exit
+/// naturally.
+trait PromiseCancel {
+    fn cancel(self);
+}
+
+impl<T: Send + 'static> PromiseCancel for Promise<T> {
+    #[cfg(feature = "tokio")]
+    fn cancel(self) {
+        self.abort();
+    }
+
+    #[cfg(not(feature = "tokio"))]
+    fn cancel(self) {
+        drop(self);
+    }
+}
 
 #[derive(Clone)]
 pub struct App {
