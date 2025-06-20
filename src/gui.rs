@@ -579,10 +579,12 @@ impl App {
     ///
     /// The window allows configuration of global application preferences.
     fn render_settings_window(&mut self, ctx: &egui::Context) {
+        let center = ctx.available_rect().center();
         egui::Window::new("Settings")
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(center)
             .show(ctx, |ui| {
                 ui.checkbox(&mut self.save_on_exit, "Save on exit");
                 if ui.button("Close").clicked() {
