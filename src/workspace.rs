@@ -62,6 +62,16 @@ impl Workspace {
         }
     }
 
+    /// Resets the workspace hotkey to its default state.
+    ///
+    /// If a hotkey is currently assigned it will be unregistered and removed.
+    pub fn reset_hotkey(&mut self, app: &App) {
+        if let Some(ref hotkey) = self.hotkey {
+            hotkey.unregister(app);
+        }
+        self.hotkey = None;
+    }
+
     /// Produces an egui `RichText` label for the workspace **header**, color-coded to represent its state.
     ///
     /// # Behavior
@@ -99,7 +109,10 @@ impl Workspace {
     }
 
     /// Renders the workspace details, such as hotkey and windows.
-    pub fn render_details(&mut self, ui: &mut egui::Ui) {
+    ///
+    /// The `app` reference is required so that the hotkey can be unregistered
+    /// when resetting it back to the default state.
+    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) {
         // Hotkey section
         ui.horizontal(|ui| {
             ui.label("Hotkey:");
@@ -109,8 +122,12 @@ impl Workspace {
                 .as_ref()
                 .map(|h| h.key_sequence.clone())
                 .unwrap_or_else(|| "None".to_string());
+            let response = ui.text_edit_singleline(&mut temp_hotkey);
+            let reset_clicked = ui.button("Reset").clicked();
 
-            if ui.text_edit_singleline(&mut temp_hotkey).changed() {
+            if reset_clicked {
+                self.reset_hotkey(app);
+            } else if response.changed() {
                 match self.set_hotkey(&temp_hotkey) {
                     Ok(_) => {
                         let valid_label = ui.colored_label(egui::Color32::GREEN, "Valid");
