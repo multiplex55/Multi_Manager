@@ -1,7 +1,7 @@
 use crate::utils::*;
 use crate::window_manager::{check_hotkeys, send_all_windows_home};
 use crate::workspace::*;
-use eframe::egui;
+use eframe::egui::{self, TopBottomPanel, menu};
 use eframe::egui::collapsing_header::CollapsingState;
 use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
@@ -158,6 +158,8 @@ impl EframeApp for App {
         let mut new_workspace: Option<Workspace> = None;
         let mut workspace_to_delete: Option<usize> = None;
 
+        self.render_menu_bar(ctx);
+
         egui::CentralPanel::default().show(ctx, |ui| {
             self.render_header(ui, &mut save_flag, &mut new_workspace);
             ui.separator();
@@ -181,6 +183,22 @@ impl EframeApp for App {
 }
 
 impl App {
+    /// Renders the application's menu bar with a "File" menu.
+    ///
+    /// The menu contains a single "Settings" item that sets
+    /// `self.show_settings` to `true` when selected.
+    fn render_menu_bar(&mut self, ctx: &egui::Context) {
+        TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Settings").clicked() {
+                        self.show_settings = true;
+                        ui.close_menu();
+                    }
+                });
+            });
+        });
+    }
     /// Renders the header section of the application's GUI.
     ///
     /// This function displays:
