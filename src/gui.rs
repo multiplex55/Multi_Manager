@@ -261,9 +261,6 @@ impl App {
             if ui.button("Send All Home").clicked() {
                 self.send_all_home();
             }
-            if ui.button("Settings").clicked() {
-                self.show_settings = true;
-            }
             let label = if self.all_expanded {
                 "Collapse All"
             } else {
