@@ -5,8 +5,10 @@ mod hotkey;
 mod utils;
 mod window_manager;
 mod workspace;
+mod settings;
 
 use log::info;
+use crate::settings::load_settings;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -47,6 +49,8 @@ fn main() {
 
     info!("Starting Multi Manager application...");
 
+    let settings = load_settings();
+
     // Initialize the application states
     let app = gui::App {
         app_title_name: "Multi Manager".to_string(),
@@ -59,7 +63,7 @@ fn main() {
         all_expanded: true,
         expand_all_signal: None,
         show_settings: false,
-        save_on_exit: false,
+        save_on_exit: settings.save_on_exit,
     };
 
     // Launch GUI and set the taskbar icon after creating the window
