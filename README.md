@@ -79,7 +79,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
    cd multi-manager
    ```
 
-2. Install dependencies:
+2. Build the project (default features include `glow`):
    ```bash
    cargo build
    ```
