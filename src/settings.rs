@@ -5,11 +5,15 @@ use std::io::{Read, Write};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
     pub save_on_exit: bool,
+    pub log_level: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { save_on_exit: false }
+        Self {
+            save_on_exit: false,
+            log_level: "info".to_string(),
+        }
     }
 }
 
@@ -55,21 +59,29 @@ mod tests {
     fn round_trip_true() {
         let _guard = TEST_MUTEX.lock().unwrap();
         cleanup();
-        let settings = Settings { save_on_exit: true };
+        let settings = Settings {
+            save_on_exit: true,
+            log_level: "debug".to_string(),
+        };
         save_settings(&settings);
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, true);
+        assert_eq!(loaded.log_level, "debug");
     }
 
     #[test]
     fn round_trip_false() {
         let _guard = TEST_MUTEX.lock().unwrap();
         cleanup();
-        let settings = Settings { save_on_exit: false };
+        let settings = Settings {
+            save_on_exit: false,
+            log_level: "info".to_string(),
+        };
         save_settings(&settings);
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, false);
+        assert_eq!(loaded.log_level, "info");
     }
 }
