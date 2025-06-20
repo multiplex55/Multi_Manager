@@ -24,6 +24,8 @@ pub struct App {
     pub rename_dialog: Option<(usize, String)>,
     pub all_expanded: bool,
     pub expand_all_signal: Option<bool>,
+    pub show_settings: bool,
+    pub save_on_exit: bool,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -171,6 +173,10 @@ impl EframeApp for App {
         if let Some(index) = workspace_to_delete {
             self.delete_workspace(index);
         }
+
+        if self.show_settings {
+            self.render_settings_window(ctx);
+        }
     }
 }
 
@@ -236,6 +242,9 @@ impl App {
             }
             if ui.button("Send All Home").clicked() {
                 self.send_all_home();
+            }
+            if ui.button("Settings").clicked() {
+                self.show_settings = true;
             }
             let label = if self.all_expanded {
                 "Collapse All"
@@ -564,6 +573,22 @@ impl App {
     fn delete_workspace(&self, index: usize) {
         let mut workspaces = self.workspaces.lock().unwrap();
         workspaces.remove(index);
+    }
+
+    /// Displays the settings window when `self.show_settings` is `true`.
+    ///
+    /// The window allows configuration of global application preferences.
+    fn render_settings_window(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Settings")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.checkbox(&mut self.save_on_exit, "Save on exit");
+                if ui.button("Close").clicked() {
+                    self.show_settings = false;
+                }
+            });
     }
 
     /// Sends every window in all workspaces back to its configured home position.
