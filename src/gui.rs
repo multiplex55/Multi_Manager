@@ -591,12 +591,17 @@ impl App {
     ///
     /// # Notes
     /// - If the `index` is out of bounds, the function will panic as it directly calls `Vec::remove`.
-    /// - This function does not unregister any associated hotkeys or clean up other resources.
+    /// - If the workspace has a registered hotkey, it will be unregistered before removal.
     ///
     /// # Error Conditions
     /// - Panics if the `index` is greater than or equal to the length of the `workspaces` list.
     fn delete_workspace(&self, index: usize) {
         let mut workspaces = self.workspaces.lock().unwrap();
+        if let Some(workspace) = workspaces.get_mut(index) {
+            if let Some(ref hotkey) = workspace.hotkey {
+                hotkey.unregister(self);
+            }
+        }
         workspaces.remove(index);
     }
 
