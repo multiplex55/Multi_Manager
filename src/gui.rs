@@ -1,6 +1,7 @@
 use crate::utils::*;
 use crate::window_manager::{check_hotkeys, send_all_windows_home};
 use crate::workspace::*;
+use crate::settings::{save_settings, Settings};
 use eframe::egui::{self, TopBottomPanel, menu};
 use eframe::egui::collapsing_header::CollapsingState;
 use eframe::egui::ViewportBuilder;
@@ -179,6 +180,15 @@ impl EframeApp for App {
         if self.show_settings {
             self.render_settings_window(ctx);
         }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.save_on_exit {
+            self.save_workspaces();
+        }
+        save_settings(&Settings {
+            save_on_exit: self.save_on_exit,
+        });
     }
 }
 
@@ -601,7 +611,12 @@ impl App {
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(center)
             .show(ctx, |ui| {
-                ui.checkbox(&mut self.save_on_exit, "Save on exit");
+                let response = ui.checkbox(&mut self.save_on_exit, "Save on exit");
+                if response.changed() {
+                    save_settings(&Settings {
+                        save_on_exit: self.save_on_exit,
+                    });
+                }
                 if ui.button("Close").clicked() {
                     self.show_settings = false;
                 }
