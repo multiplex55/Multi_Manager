@@ -317,7 +317,7 @@ impl App {
                             });
                         })
                         .body(|ui| {
-                            workspace.render_details(ui);
+                            workspace.render_details(ui, self);
 
                             let mut context = WorkspaceControlContext {
                                 workspace_to_delete,
