@@ -58,6 +58,8 @@ fn main() {
         rename_dialog: None,
         all_expanded: true,
         expand_all_signal: None,
+        show_settings: false,
+        save_on_exit: false,
     };
 
     // Launch GUI and set the taskbar icon after creating the window
