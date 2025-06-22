@@ -27,6 +27,7 @@ pub struct App {
     pub expand_all_signal: Option<bool>,
     pub show_settings: bool,
     pub save_on_exit: bool,
+    pub log_level: String,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -188,6 +189,7 @@ impl EframeApp for App {
         }
         save_settings(&Settings {
             save_on_exit: self.save_on_exit,
+            log_level: self.log_level.clone(),
         });
     }
 }
@@ -620,6 +622,23 @@ impl App {
                 if response.changed() {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
+                        log_level: self.log_level.clone(),
+                    });
+                }
+                let mut changed = false;
+                egui::ComboBox::from_label("Log Level")
+                    .selected_text(&self.log_level)
+                    .show_ui(ui, |ui| {
+                        for lvl in ["trace", "debug", "info", "warn", "error", "off"] {
+                            if ui.selectable_value(&mut self.log_level, lvl.to_string(), lvl).clicked() {
+                                changed = true;
+                            }
+                        }
+                    });
+                if changed {
+                    save_settings(&Settings {
+                        save_on_exit: self.save_on_exit,
+                        log_level: self.log_level.clone(),
                     });
                 }
                 if ui.button("Close").clicked() {
