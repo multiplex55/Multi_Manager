@@ -499,7 +499,7 @@ impl App {
             if ui.button("Delete Workspace").clicked() {
                 let confirmation_message = format!(
                     "Are you sure you want to delete workspace '{}'? This action cannot be undone.",
-                    context.index
+                    &workspace.name
                 );
                 if show_confirmation_box(&confirmation_message, "Confirm Deletion") {
                     *context.workspace_to_delete = Some(context.index);
