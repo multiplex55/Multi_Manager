@@ -3,7 +3,7 @@ use crate::workspace::Workspace;
 use log::{info, warn};
 use std::time::Instant;
 use windows::core::{Result, PCWSTR};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -323,7 +323,7 @@ pub fn restore_all_desktops(file: &str) {
             if let Err(e) = virtual_desktop::switch_desktop(target) {
                 warn!("Failed to switch desktop: {:?}", e);
             }
-            let hwnd = HWND(info.hwnd as isize);
+            let hwnd = HWND(info.hwnd as *mut _);
             unsafe {
                 if IsWindow(hwnd).as_bool() {
                     if IsIconic(hwnd).as_bool() { ShowWindow(hwnd, SW_RESTORE); }

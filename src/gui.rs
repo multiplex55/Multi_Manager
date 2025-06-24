@@ -8,7 +8,6 @@ use crate::window_manager::{
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
 use eframe::egui::{self, TopBottomPanel, menu};
-use eframe::egui::collapsing_header::CollapsingState;
 use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
@@ -355,7 +354,7 @@ impl App {
                         state.set_open(expand);
                     }
 
-                    let (toggle_response, mut header_inner, _) = state
+                    let (_toggle_response, mut header_inner, _) = state
                         .show_header(ui, |ui| {
                             let label_response = ui.label(header_text);
                             label_response.context_menu(|ui| {
