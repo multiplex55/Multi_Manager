@@ -13,6 +13,7 @@ use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
 use log::{info, warn};
 use poll_promise::Promise;
+use rfd::FileDialog;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -32,6 +33,7 @@ pub struct App {
     pub show_settings: bool,
     pub save_on_exit: bool,
     pub log_level: String,
+    pub last_layout_file: Option<String>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -194,7 +196,7 @@ impl EframeApp for App {
         save_settings(&Settings {
             save_on_exit: self.save_on_exit,
             log_level: self.log_level.clone(),
-            last_layout_file: None,
+            last_layout_file: self.last_layout_file.clone(),
         });
     }
 }
@@ -210,12 +212,42 @@ impl App {
                 ui.menu_button("File", |ui| {
                     ui.menu_button("Desktop Management", |ui| {
                         if ui.button("Save All Desktops").clicked() {
-                            capture_all_desktops("desktop_layout.json");
+                            let default_path = self
+                                .last_layout_file
+                                .clone()
+                                .unwrap_or_else(|| "desktop_layout.json".to_string());
+                            let chosen = rfd::FileDialog::new()
+                                .set_file_name(&default_path)
+                                .save_file()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or(default_path);
+                            capture_all_desktops(&chosen);
+                            self.last_layout_file = Some(chosen.clone());
+                            save_settings(&Settings {
+                                save_on_exit: self.save_on_exit,
+                                log_level: self.log_level.clone(),
+                                last_layout_file: self.last_layout_file.clone(),
+                            });
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
                         }
                         if ui.button("Restore All Desktops").clicked() {
-                            restore_all_desktops("desktop_layout.json");
+                            let default_path = self
+                                .last_layout_file
+                                .clone()
+                                .unwrap_or_else(|| "desktop_layout.json".to_string());
+                            let chosen = rfd::FileDialog::new()
+                                .set_file_name(&default_path)
+                                .pick_file()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or(default_path);
+                            restore_all_desktops(&chosen);
+                            self.last_layout_file = Some(chosen.clone());
+                            save_settings(&Settings {
+                                save_on_exit: self.save_on_exit,
+                                log_level: self.log_level.clone(),
+                                last_layout_file: self.last_layout_file.clone(),
+                            });
                             ui.close_menu();
                         }
                     });
@@ -656,9 +688,25 @@ impl App {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
                         log_level: self.log_level.clone(),
-                        last_layout_file: None,
+                        last_layout_file: self.last_layout_file.clone(),
                     });
                 }
+                let mut path = self.last_layout_file.clone().unwrap_or_default();
+                ui.horizontal(|ui| {
+                    ui.label("Layout file:");
+                    if ui.text_edit_singleline(&mut path).changed() {
+                        if path.trim().is_empty() {
+                            self.last_layout_file = None;
+                        } else {
+                            self.last_layout_file = Some(path.clone());
+                        }
+                        save_settings(&Settings {
+                            save_on_exit: self.save_on_exit,
+                            log_level: self.log_level.clone(),
+                            last_layout_file: self.last_layout_file.clone(),
+                        });
+                    }
+                });
                 if ui.button("Close").clicked() {
                     self.show_settings = false;
                 }

@@ -65,6 +65,7 @@ fn main() {
         show_settings: false,
         save_on_exit: settings.save_on_exit,
         log_level: settings.log_level.clone(),
+        last_layout_file: settings.last_layout_file.clone(),
     };
 
     // Launch GUI and set the taskbar icon after creating the window
