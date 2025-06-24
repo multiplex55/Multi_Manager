@@ -134,6 +134,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 Run the application with optional arguments to save or load all desktop layouts:
 
 ```bash
+cargo run -- --help
 cargo run -- --save-desktops
 cargo run -- --save-desktops custom.json
 cargo run -- --load-desktops

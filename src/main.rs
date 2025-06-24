@@ -18,6 +18,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 
 #[derive(Parser, Debug)]
+#[command(author, version, about = "Multi Manager window tool", long_about = None)]
 struct CliArgs {
     #[arg(long = "save-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
     save_desktops: Option<String>,
@@ -64,11 +65,13 @@ fn main() {
 
     if let Some(file) = args.save_desktops {
         capture_all_desktops(&file);
+        println!("Saved desktops to {}", file);
         return;
     }
 
     if let Some(file) = args.load_desktops {
         restore_all_desktops(&file);
+        println!("Restored desktops from {}", file);
         return;
     }
 
