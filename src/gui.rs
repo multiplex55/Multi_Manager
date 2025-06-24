@@ -358,7 +358,7 @@ impl App {
                         state.set_open(expand);
                     }
 
-                    let (_toggle_response, mut header_inner, _) = state
+                    let (_toggle_response, header_inner, _) = state
                         .show_header(ui, |ui| {
                             let label_response = ui.label(header_text);
                             label_response.context_menu(|ui| {
