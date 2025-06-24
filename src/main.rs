@@ -10,10 +10,21 @@ mod virtual_desktop;
 mod desktop_window_info;
 
 use log::info;
+use clap::Parser;
 use crate::settings::load_settings;
+use crate::window_manager::{capture_all_desktops, restore_all_desktops};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
+
+#[derive(Parser, Debug)]
+struct CliArgs {
+    #[arg(long = "save-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
+    save_desktops: Option<String>,
+
+    #[arg(long = "load-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
+    load_desktops: Option<String>,
+}
 
 /// The main entry point for the Multi Manager application.
 ///
@@ -41,6 +52,8 @@ use std::sync::{Arc, Mutex};
 /// }
 /// ```
 fn main() {
+    let args = CliArgs::parse();
+
     // Ensure logging is initialized
     ensure_logging_initialized();
 
@@ -48,6 +61,16 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "1");
 
     info!("Starting Multi Manager application...");
+
+    if let Some(file) = args.save_desktops {
+        capture_all_desktops(&file);
+        return;
+    }
+
+    if let Some(file) = args.load_desktops {
+        restore_all_desktops(&file);
+        return;
+    }
 
     let settings = load_settings();
 

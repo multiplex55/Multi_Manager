@@ -129,6 +129,17 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 2. Choose **Save All Desktops** to store the current window layout.
 3. Choose **Restore All Desktops** to reload the saved layout.
 
+### Command Line Examples
+
+Run the application with optional arguments to save or load all desktop layouts:
+
+```bash
+cargo run -- --save-desktops
+cargo run -- --save-desktops custom.json
+cargo run -- --load-desktops
+cargo run -- --load-desktops custom.json
+```
+
 ---
 
 ## Configuration
