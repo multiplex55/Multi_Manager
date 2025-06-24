@@ -2,15 +2,23 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 
+/// Persistent configuration options loaded from and saved to `settings.json`.
+///
+/// These values control global behavior such as logging verbosity and whether
+/// the application should automatically save workspaces on exit.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
+    /// If `true`, workspaces are automatically saved when the application exits.
     pub save_on_exit: bool,
+    /// The log level used when initializing the logger (e.g. `"info"`).
     pub log_level: String,
+    /// Optional path to the last desktop layout file used.
     #[serde(default)]
     pub last_layout_file: Option<String>,
 }
 
 impl Default for Settings {
+    /// Returns a `Settings` instance with sensible defaults.
     fn default() -> Self {
         Self {
             save_on_exit: false,
@@ -20,6 +28,9 @@ impl Default for Settings {
     }
 }
 
+/// Load persisted settings from `settings.json` if it exists.
+///
+/// If the file cannot be read or parsed, default settings are returned.
 pub fn load_settings() -> Settings {
     let mut content = String::new();
     if let Ok(mut file) = File::open("settings.json") {
@@ -32,6 +43,8 @@ pub fn load_settings() -> Settings {
     Settings::default()
 }
 
+/// Save the provided `settings` struct to `settings.json` in a human
+/// readable format.
 pub fn save_settings(settings: &Settings) {
     if let Ok(json) = serde_json::to_string_pretty(settings) {
         if let Err(e) = File::create("settings.json")

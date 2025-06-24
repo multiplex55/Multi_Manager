@@ -27,6 +27,8 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 - **Persistent Storage**:
   - Save and load workspace configurations in JSON format.
   - Pretty-printed JSON for easy manual editing.
+- **Desktop Management**:
+  - Save and restore window layouts across all virtual desktops from the **File -> Desktop Management** menu.
 - **Visual Feedback**:
   - Color-coded HWND validity indicators for associated windows.
   - Popup dialogs for feedback (e.g., workspace saved successfully).
@@ -120,6 +122,12 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
    - Enter a valid hotkey combination in the input field.
    - Click "Validate Hotkey" to confirm.
 2. **Activate Workspace**: Use the assigned hotkey to activate the workspace and toggle window positions.
+
+### Desktop Management
+
+1. Open **File -> Desktop Management**.
+2. Choose **Save All Desktops** to store the current window layout.
+3. Choose **Restore All Desktops** to reload the saved layout.
 
 ---
 
