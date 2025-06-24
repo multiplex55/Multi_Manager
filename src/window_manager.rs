@@ -258,7 +258,7 @@ use serde_json;
 pub fn capture_all_desktops(file: &str) {
     let mut infos: Vec<DesktopWindowInfo> = Vec::new();
     unsafe {
-        EnumWindows(Some(enum_capture_proc), LPARAM(&mut infos as *mut _ as isize));
+        let _ = EnumWindows(Some(enum_capture_proc), LPARAM(&mut infos as *mut _ as isize));
     }
     if let Ok(json) = serde_json::to_string_pretty(&infos) {
         if let Err(e) = File::create(file).and_then(|mut f| f.write_all(json.as_bytes())) {
@@ -326,7 +326,7 @@ pub fn restore_all_desktops(file: &str) {
             let hwnd = HWND(info.hwnd as *mut _);
             unsafe {
                 if IsWindow(hwnd).as_bool() {
-                    if IsIconic(hwnd).as_bool() { ShowWindow(hwnd, SW_RESTORE); }
+                    if IsIconic(hwnd).as_bool() { let _ = ShowWindow(hwnd, SW_RESTORE); }
                     move_window(hwnd, info.rect.0, info.rect.1, info.rect.2, info.rect.3).ok();
                 }
             }
