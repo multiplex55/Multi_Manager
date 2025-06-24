@@ -6,6 +6,8 @@ mod utils;
 mod window_manager;
 mod workspace;
 mod settings;
+mod virtual_desktop;
+mod desktop_window_info;
 
 use log::info;
 use crate::settings::load_settings;

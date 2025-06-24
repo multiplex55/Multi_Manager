@@ -6,6 +6,8 @@ use std::io::{Read, Write};
 pub struct Settings {
     pub save_on_exit: bool,
     pub log_level: String,
+    #[serde(default)]
+    pub last_layout_file: Option<String>,
 }
 
 impl Default for Settings {
@@ -13,6 +15,7 @@ impl Default for Settings {
         Self {
             save_on_exit: false,
             log_level: "info".to_string(),
+            last_layout_file: None,
         }
     }
 }
@@ -62,12 +65,14 @@ mod tests {
         let settings = Settings {
             save_on_exit: true,
             log_level: "debug".to_string(),
+            last_layout_file: Some("file.json".into()),
         };
         save_settings(&settings);
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, true);
         assert_eq!(loaded.log_level, "debug");
+        assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
     }
 
     #[test]
@@ -77,11 +82,13 @@ mod tests {
         let settings = Settings {
             save_on_exit: false,
             log_level: "info".to_string(),
+            last_layout_file: None,
         };
         save_settings(&settings);
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, false);
         assert_eq!(loaded.log_level, "info");
+        assert_eq!(loaded.last_layout_file, None);
     }
 }

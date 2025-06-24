@@ -3,7 +3,7 @@ use crate::workspace::Workspace;
 use log::{info, warn};
 use std::time::Instant;
 use windows::core::{Result, PCWSTR};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -245,6 +245,106 @@ pub fn send_all_windows_home(workspaces: &mut [Workspace]) {
     for workspace in workspaces.iter() {
         send_workspace_windows_home(workspace);
     }
+}
+
+use crate::desktop_window_info::DesktopWindowInfo;
+use crate::virtual_desktop;
+use std::fs::File;
+use std::io::Write;
+use serde_json;
+
+/// Capture window positions for all desktops and store them as JSON.
+#[cfg(target_os = "windows")]
+pub fn capture_all_desktops(file: &str) {
+    let mut infos: Vec<DesktopWindowInfo> = Vec::new();
+    unsafe {
+        EnumWindows(Some(enum_capture_proc), LPARAM(&mut infos as *mut _ as isize));
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&infos) {
+        if let Err(e) = File::create(file).and_then(|mut f| f.write_all(json.as_bytes())) {
+            warn!("Failed to save desktop data: {}", e);
+        } else {
+            info!("Saved desktop layout to {}", file);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn enum_capture_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    if !IsWindow(hwnd).as_bool() || !IsWindowVisible(hwnd).as_bool() {
+        return BOOL(1);
+    }
+    let list = &mut *(lparam.0 as *mut Vec<DesktopWindowInfo>);
+    if let Ok(desktop) = virtual_desktop::get_desktop_by_window(hwnd) {
+        if let Ok(index) = desktop.get_index() {
+            let mut buffer = [0u16; 256];
+            let len = GetWindowTextW(hwnd, &mut buffer);
+            let title = String::from_utf16_lossy(&buffer[..len as usize]);
+            if let Ok((x, y, w, h)) = get_window_position(hwnd) {
+                list.push(DesktopWindowInfo {
+                    desktop_index: index,
+                    hwnd: hwnd.0 as isize,
+                    title,
+                    rect: (x, y, w, h),
+                });
+            }
+        }
+    }
+    BOOL(1)
+}
+
+/// Restore window positions across all desktops from a JSON file.
+#[cfg(target_os = "windows")]
+pub fn restore_all_desktops(file: &str) {
+    let data = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("Failed to read {}: {}", file, e);
+            return;
+        }
+    };
+    let infos: Vec<DesktopWindowInfo> = match serde_json::from_str(&data) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!("Failed to parse {}: {}", file, e);
+            return;
+        }
+    };
+    let desktops = match virtual_desktop::get_desktops() {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("Failed to enumerate desktops: {:?}", e);
+            return;
+        }
+    };
+    let current = virtual_desktop::get_current_desktop().ok();
+    for info in &infos {
+        if let Some(target) = desktops.get(info.desktop_index as usize) {
+            if let Err(e) = virtual_desktop::switch_desktop(target) {
+                warn!("Failed to switch desktop: {:?}", e);
+            }
+            let hwnd = HWND(info.hwnd as *mut _);
+            unsafe {
+                if IsWindow(hwnd).as_bool() {
+                    if IsIconic(hwnd).as_bool() { ShowWindow(hwnd, SW_RESTORE); }
+                    move_window(hwnd, info.rect.0, info.rect.1, info.rect.2, info.rect.3).ok();
+                }
+            }
+        }
+    }
+    if let Some(d) = current {
+        let _ = virtual_desktop::switch_desktop(&d);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn capture_all_desktops(_file: &str) {
+    warn!("capture_all_desktops is only available on Windows");
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn restore_all_desktops(_file: &str) {
+    warn!("restore_all_desktops is only available on Windows");
 }
 
 /// Determines whether the specified `hwnd` is currently located at the given **(x, y)** coordinates
