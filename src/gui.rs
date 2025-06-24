@@ -208,6 +208,17 @@ impl App {
         TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    ui.menu_button("Desktop Management", |ui| {
+                        if ui.button("Save All Desktops").clicked() {
+                            capture_all_desktops("desktop_layout.json");
+                            show_message_box("Desktops saved", "Save");
+                            ui.close_menu();
+                        }
+                        if ui.button("Restore All Desktops").clicked() {
+                            restore_all_desktops("desktop_layout.json");
+                            ui.close_menu();
+                        }
+                    });
                     if ui.button("Settings").clicked() {
                         self.show_settings = true;
                         ui.close_menu();
@@ -277,13 +288,6 @@ impl App {
             }
             if ui.button("Send All Home").clicked() {
                 self.send_all_home();
-            }
-            if ui.button("Save All Desktops").clicked() {
-                capture_all_desktops("desktop_layout.json");
-                show_message_box("Desktops saved", "Save");
-            }
-            if ui.button("Restore All Desktops").clicked() {
-                restore_all_desktops("desktop_layout.json");
             }
             let label = if self.all_expanded {
                 "Collapse All"
