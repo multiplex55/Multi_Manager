@@ -1,5 +1,10 @@
 use crate::utils::*;
-use crate::window_manager::{check_hotkeys, send_all_windows_home};
+use crate::window_manager::{
+    check_hotkeys,
+    send_all_windows_home,
+    capture_all_desktops,
+    restore_all_desktops,
+};
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
 use eframe::egui::{self, TopBottomPanel, menu};
@@ -190,6 +195,7 @@ impl EframeApp for App {
         save_settings(&Settings {
             save_on_exit: self.save_on_exit,
             log_level: self.log_level.clone(),
+            last_layout_file: None,
         });
     }
 }
@@ -272,6 +278,13 @@ impl App {
             }
             if ui.button("Send All Home").clicked() {
                 self.send_all_home();
+            }
+            if ui.button("Save All Desktops").clicked() {
+                capture_all_desktops("desktop_layout.json");
+                show_message_box("Desktops saved", "Save");
+            }
+            if ui.button("Restore All Desktops").clicked() {
+                restore_all_desktops("desktop_layout.json");
             }
             let label = if self.all_expanded {
                 "Collapse All"
@@ -623,6 +636,7 @@ impl App {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
                         log_level: self.log_level.clone(),
+                        last_layout_file: None,
                     });
                 }
                 let mut changed = false;
@@ -639,6 +653,7 @@ impl App {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
                         log_level: self.log_level.clone(),
+                        last_layout_file: None,
                     });
                 }
                 if ui.button("Close").clicked() {
