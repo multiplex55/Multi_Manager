@@ -4,6 +4,7 @@ use crate::window_manager::{
     send_all_windows_home,
     capture_all_desktops,
     restore_all_desktops,
+    move_all_to_origin,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -257,6 +258,16 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                             });
+                            ui.close_menu();
+                        }
+                        if ui.button("Move All to Origin").clicked() {
+                            if show_confirmation_box(
+                                "Move all windows to the origin?",
+                                "Confirm Move",
+                            ) {
+                                move_all_to_origin();
+                                show_message_box("Windows moved", "Move");
+                            }
                             ui.close_menu();
                         }
                     });
