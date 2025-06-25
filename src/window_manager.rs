@@ -337,6 +337,95 @@ pub fn restore_all_desktops(file: &str) {
     }
 }
 
+#[cfg(target_os = "windows")]
+/// Helper structure passed to `EnumWindows` containing the primary monitor
+/// dimensions. The enumeration callback uses these values to calculate the
+/// centered coordinates for each window it visits.
+struct OriginData {
+    /// Width of the primary monitor in physical pixels.
+    width: i32,
+    /// Height of the primary monitor in physical pixels.
+    height: i32,
+}
+
+#[cfg(target_os = "windows")]
+/// Moves every visible top-level window so that it is centered on the primary
+/// monitor.
+///
+/// # Behavior
+/// - Retrieves the primary monitor's dimensions using
+///   [`GetSystemMetrics`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getsystemmetrics).
+/// - Enumerates all top-level windows via [`EnumWindows`]. For each valid and
+///   visible window, the helper callback (`enum_origin_proc`) is invoked.
+/// - The callback calculates the centered coordinates for the window based on
+///   its size and moves it with [`move_window`].
+///
+/// # Side Effects
+/// - Causes all windows on screen to reposition to the center. Minimized or
+///   invisible windows are ignored.
+/// - Logs a message for each moved window, or a warning if the move fails.
+///
+/// # Example
+/// ```no_run
+/// move_all_to_origin(); // Centers every visible window on the primary screen
+/// ```
+pub fn move_all_to_origin() {
+    unsafe {
+        let mut data = OriginData {
+            width: GetSystemMetrics(SM_CXSCREEN),
+            height: GetSystemMetrics(SM_CYSCREEN),
+        };
+        // Enumerate every top-level window, passing a pointer to `data` so the
+        // callback can compute centered positions.
+        let _ = EnumWindows(Some(enum_origin_proc), LPARAM(&mut data as *mut _ as isize));
+    }
+}
+
+#[cfg(target_os = "windows")]
+/// Enumeration callback used by [`move_all_to_origin`]. For each window, it
+/// determines whether the window is valid and visible and, if so, moves it to
+/// the center of the primary monitor.
+///
+/// # Parameters
+/// - `hwnd`: Handle of the current window provided by `EnumWindows`.
+/// - `lparam`: Pointer to an [`OriginData`] instance containing the monitor
+///   dimensions.
+///
+/// # Returns
+/// - `BOOL(1)` to continue enumeration regardless of success or failure.
+///
+/// # Behavior
+/// - Skips windows that are invalid or not visible.
+/// - Retrieves the window's size using [`get_window_position`].
+/// - Calculates centered coordinates and calls [`move_window`].
+/// - Logs the outcome of the move for debugging purposes.
+unsafe extern "system" fn enum_origin_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    // Skip invalid or hidden windows.
+    if !IsWindow(hwnd).as_bool() || !IsWindowVisible(hwnd).as_bool() {
+        return BOOL(1);
+    }
+    // Extract the screen dimensions from lparam.
+    let data = &*(lparam.0 as *const OriginData);
+
+    if let Ok((_, _, w, h)) = get_window_position(hwnd) {
+        // Compute centered coordinates.
+        let x = (data.width - w) / 2;
+        let y = (data.height - h) / 2;
+        match move_window(hwnd, x, y, w, h) {
+            Ok(_) => info!("Moved window {:?} to center ({}, {})", hwnd, x, y),
+            Err(e) => warn!("Failed to move window {:?}: {}", hwnd, e),
+        }
+    }
+    BOOL(1)
+}
+
+#[cfg(not(target_os = "windows"))]
+/// Stub implementation for non-Windows platforms. Calling this function on a
+/// non-Windows build logs a warning and performs no action.
+pub fn move_all_to_origin() {
+    warn!("move_all_to_origin is only available on Windows");
+}
+
 #[cfg(not(target_os = "windows"))]
 pub fn capture_all_desktops(_file: &str) {
     warn!("capture_all_desktops is only available on Windows");
