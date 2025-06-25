@@ -133,40 +133,39 @@ impl Workspace {
                 self.reset_hotkey(app);
                 changed = true;
             } else if response.changed() {
-                match self.set_hotkey(&temp_hotkey) {
-                    Ok(_) => {
+                // Always attempt to set the hotkey, but handle validation only when enabled
+                let _ = self.set_hotkey(&temp_hotkey);
+                changed = true;
+            } else if !self.disabled {
+                if let Some(hotkey) = self.hotkey.as_ref() {
+                    if is_valid_key_combo(&hotkey.key_sequence) {
                         let valid_label = ui.colored_label(egui::Color32::GREEN, "Valid");
                         Self::attach_context_menu(
                             ui,
                             &valid_label,
                             "Valid Hotkey Options",
-                            &temp_hotkey,
+                            &hotkey.key_sequence,
                         );
-                        info!("Hotkey '{}' is valid and set.", temp_hotkey);
-                    }
-                    Err(_) => {
+                    } else {
                         let invalid_label = ui.colored_label(egui::Color32::RED, "Invalid");
                         Self::attach_context_menu(
                             ui,
                             &invalid_label,
                             "Invalid Hotkey Options",
-                            &temp_hotkey,
+                            &hotkey.key_sequence,
                         );
-                        warn!("Hotkey '{}' is invalid.", temp_hotkey);
                     }
+                } else {
+                    let invalid_label = ui.colored_label(egui::Color32::GRAY, "Edit to validate");
+                    Self::attach_context_menu(
+                        ui,
+                        &invalid_label,
+                        "Invalid Hotkey Options",
+                        &temp_hotkey,
+                    );
                 }
-                changed = true;
-            } else if is_valid_key_combo(&temp_hotkey) {
-                let valid_label = ui.colored_label(egui::Color32::GREEN, "Valid");
-                Self::attach_context_menu(ui, &valid_label, "Valid Hotkey Options", &temp_hotkey);
             } else {
-                let invalid_label = ui.colored_label(egui::Color32::GRAY, "Edit to validate");
-                Self::attach_context_menu(
-                    ui,
-                    &invalid_label,
-                    "Invalid Hotkey Options",
-                    &temp_hotkey,
-                );
+                ui.colored_label(egui::Color32::GRAY, "Validation disabled");
             }
         });
 
@@ -406,8 +405,13 @@ impl Workspace {
     ///
     /// # Notes
     /// - This function should be called whenever the state of a workspace changes (e.g., hotkey or windows are modified).
-    /// - The `disabled` state does not affect validation; it is treated independently.
+    /// - If the workspace is disabled, validation is skipped and the workspace is marked invalid.
     pub fn validate_workspace(&mut self) {
+        if self.disabled {
+            self.valid = false;
+            return;
+        }
+
         self.valid = {
             let hotkey_valid = self
                 .hotkey
