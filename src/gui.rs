@@ -808,6 +808,9 @@ impl App {
         if !*initial_validation_done {
             let mut workspaces = self.workspaces.lock().unwrap();
             for (i, workspace) in workspaces.iter_mut().enumerate() {
+                if workspace.disabled {
+                    continue;
+                }
                 if let Some(ref mut hotkey) = workspace.hotkey {
                     if !hotkey.register(self, i as i32) {
                         warn!(
