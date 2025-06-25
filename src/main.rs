@@ -66,7 +66,14 @@ struct CliArgs {
 /// }
 /// ```
 fn main() {
-    ensure_console();
+    // Count the number of command line arguments. If there is only one
+    // (the program name) we skip attaching/allocating a console so that
+    // help messages still show correctly when invoked without extra
+    // parameters.
+    let arg_count = std::env::args_os().len();
+    if arg_count > 1 {
+        ensure_console();
+    }
     let args = CliArgs::parse();
 
     // Ensure logging is initialized
