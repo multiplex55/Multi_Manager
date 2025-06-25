@@ -1,5 +1,6 @@
 use crate::gui::App;
 use crate::workspace::Workspace;
+use crate::utils::{show_confirmation_box, show_message_box};
 use log::{info, warn};
 use std::time::Instant;
 use windows::core::{Result, PCWSTR};
@@ -350,7 +351,7 @@ struct OriginData {
 
 #[cfg(target_os = "windows")]
 /// Moves every visible top-level window so that it is centered on the primary
-/// monitor.
+/// monitor. A confirmation dialog is displayed before any action is taken.
 ///
 /// # Behavior
 /// - Retrieves the primary monitor's dimensions using
@@ -361,15 +362,23 @@ struct OriginData {
 ///   its size and moves it with [`move_window`].
 ///
 /// # Side Effects
+/// - Prompts the user to confirm the action.
 /// - Causes all windows on screen to reposition to the center. Minimized or
 ///   invisible windows are ignored.
 /// - Logs a message for each moved window, or a warning if the move fails.
+/// - Shows a completion message once all windows have been centered.
 ///
 /// # Example
 /// ```no_run
 /// move_all_to_origin(); // Centers every visible window on the primary screen
 /// ```
 pub fn move_all_to_origin() {
+    if !show_confirmation_box(
+        "Move all windows to the center of the primary monitor?",
+        "Confirm",
+    ) {
+        return;
+    }
     unsafe {
         let mut data = OriginData {
             width: GetSystemMetrics(SM_CXSCREEN),
@@ -379,6 +388,7 @@ pub fn move_all_to_origin() {
         // callback can compute centered positions.
         let _ = EnumWindows(Some(enum_origin_proc), LPARAM(&mut data as *mut _ as isize));
     }
+    show_message_box("All windows have been centered", "Completed");
 }
 
 #[cfg(target_os = "windows")]

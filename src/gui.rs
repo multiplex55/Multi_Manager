@@ -261,13 +261,7 @@ impl App {
                             ui.close_menu();
                         }
                         if ui.button("Move All to Origin").clicked() {
-                            if show_confirmation_box(
-                                "Move all windows to the origin?",
-                                "Confirm Move",
-                            ) {
-                                move_all_to_origin();
-                                show_message_box("Windows moved", "Move");
-                            }
+                            move_all_to_origin();
                             ui.close_menu();
                         }
                     });
