@@ -10,6 +10,9 @@ use std::io::{Read, Write};
 pub struct Settings {
     /// If `true`, workspaces are automatically saved when the application exits.
     pub save_on_exit: bool,
+    /// If `true`, workspaces are saved automatically whenever changes occur.
+    #[serde(default)]
+    pub auto_save: bool,
     /// The log level used when initializing the logger (e.g. `"info"`).
     pub log_level: String,
     /// Optional path to the last desktop layout file used.
@@ -22,6 +25,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             save_on_exit: false,
+            auto_save: false,
             log_level: "info".to_string(),
             last_layout_file: None,
         }
@@ -77,6 +81,7 @@ mod tests {
         cleanup();
         let settings = Settings {
             save_on_exit: true,
+            auto_save: true,
             log_level: "debug".to_string(),
             last_layout_file: Some("file.json".into()),
         };
@@ -84,6 +89,7 @@ mod tests {
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, true);
+        assert_eq!(loaded.auto_save, true);
         assert_eq!(loaded.log_level, "debug");
         assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
     }
@@ -94,6 +100,7 @@ mod tests {
         cleanup();
         let settings = Settings {
             save_on_exit: false,
+            auto_save: false,
             log_level: "info".to_string(),
             last_layout_file: None,
         };
@@ -101,6 +108,7 @@ mod tests {
         let loaded = load_settings();
         cleanup();
         assert_eq!(loaded.save_on_exit, false);
+        assert_eq!(loaded.auto_save, false);
         assert_eq!(loaded.log_level, "info");
         assert_eq!(loaded.last_layout_file, None);
     }

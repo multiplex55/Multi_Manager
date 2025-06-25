@@ -112,7 +112,8 @@ impl Workspace {
     ///
     /// The `app` reference is required so that the hotkey can be unregistered
     /// when resetting it back to the default state.
-    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) {
+    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) -> bool {
+        let mut changed = false;
         // Hotkey section
         ui.horizontal(|ui| {
             ui.label("Hotkey:");
@@ -130,6 +131,7 @@ impl Workspace {
 
             if reset_clicked {
                 self.reset_hotkey(app);
+                changed = true;
             } else if response.changed() {
                 match self.set_hotkey(&temp_hotkey) {
                     Ok(_) => {
@@ -153,6 +155,7 @@ impl Workspace {
                         warn!("Hotkey '{}' is invalid.", temp_hotkey);
                     }
                 }
+                changed = true;
             } else if is_valid_key_combo(&temp_hotkey) {
                 let valid_label = ui.colored_label(egui::Color32::GREEN, "Valid");
                 Self::attach_context_menu(ui, &valid_label, "Valid Hotkey Options", &temp_hotkey);
@@ -167,7 +170,9 @@ impl Workspace {
             }
         });
 
-        ui.checkbox(&mut self.rotate, "Rotate Windows");
+        if ui.checkbox(&mut self.rotate, "Rotate Windows").changed() {
+            changed = true;
+        }
 
         // Create a copy of windows for iteration
         let windows_len = self.windows.len();
@@ -183,14 +188,17 @@ impl Workspace {
 
                 if i > 0 && ui.button("Move ⏶").clicked() {
                     move_up_index = Some(i);
+                    changed = true;
                 }
                 if i < windows_len - 1 && ui.button("Move ⏷").clicked() {
                     move_down_index = Some(i);
+                    changed = true;
                 }
 
                 // Add delete button
                 if ui.button("Delete").clicked() {
                     window_to_delete = Some(i);
+                    changed = true;
                 }
 
                 // Handle HWND validity and right-click menu for individual windows
@@ -237,9 +245,10 @@ impl Workspace {
                                         warn!("Force Recapture canceled or no active window detected.");
                                     }
                                 }
-                    
+
                                 // Explicitly close the popup after the action
                                 ui.memory_mut(|mem| mem.close_popup());
+                                changed = true;
                             }
                         },
                     );
@@ -256,15 +265,16 @@ impl Workspace {
                                 "Recaptured window '{}', new HWND: {:?}",
                                 window.title, new_hwnd
                                 );
-                            } else {
-                                warn!("Recapture canceled or no active window detected.");
-                            }
+                            changed = true;
+                        } else {
+                            warn!("Recapture canceled or no active window detected.");
                         }
                     }
                 }
+                }
             });
             // Render controls for individual window
-            render_window_controls(ui, window);
+            render_window_controls(ui, window, &mut changed);
         }
 
         if let Some(i) = move_up_index {
@@ -280,6 +290,7 @@ impl Workspace {
 
         if let Some(index) = window_to_delete {
             self.windows.remove(index);
+            changed = true;
         }
 
         // Capture active window button
@@ -292,8 +303,11 @@ impl Workspace {
                     target: (0, 0, 800, 600),
                     valid: true,
                 });
+                changed = true;
             }
         }
+
+        changed
     }
 
     /// Attaches a context menu to a UI widget.
@@ -435,17 +449,18 @@ impl Workspace {
 /// # Notes
 /// - This function is called inside `render_details(...)` to iterate over each `Window` in a `Workspace`.
 /// - Relies on Win32 calls under the hood to interact with actual OS-level windows (via `HWND`).
-pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window) {
+pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window, changed: &mut bool) {
     // Home position controls
     ui.horizontal(|ui| {
         ui.label("Home:");
-        ui.add(egui::DragValue::new(&mut window.home.0).prefix("x: "));
-        ui.add(egui::DragValue::new(&mut window.home.1).prefix("y: "));
-        ui.add(egui::DragValue::new(&mut window.home.2).prefix("w: "));
-        ui.add(egui::DragValue::new(&mut window.home.3).prefix("h: "));
+        if ui.add(egui::DragValue::new(&mut window.home.0).prefix("x: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.home.1).prefix("y: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.home.2).prefix("w: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.home.3).prefix("h: ")).changed() { *changed = true; }
         if ui.button("Capture Home").clicked() {
             if let Ok((x, y, w, h)) = get_window_position(HWND(window.id as *mut _)) {
                 window.home = (x, y, w, h);
+                *changed = true;
             }
         }
         if ui.button("Move to Home").clicked() {
@@ -464,13 +479,14 @@ pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window) {
     // Target position controls
     ui.horizontal(|ui| {
         ui.label("Target:");
-        ui.add(egui::DragValue::new(&mut window.target.0).prefix("x: "));
-        ui.add(egui::DragValue::new(&mut window.target.1).prefix("y: "));
-        ui.add(egui::DragValue::new(&mut window.target.2).prefix("w: "));
-        ui.add(egui::DragValue::new(&mut window.target.3).prefix("h: "));
+        if ui.add(egui::DragValue::new(&mut window.target.0).prefix("x: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.target.1).prefix("y: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.target.2).prefix("w: ")).changed() { *changed = true; }
+        if ui.add(egui::DragValue::new(&mut window.target.3).prefix("h: ")).changed() { *changed = true; }
         if ui.button("Capture Target").clicked() {
             if let Ok((x, y, w, h)) = get_window_position(HWND(window.id as *mut _)) {
                 window.target = (x, y, w, h);
+                *changed = true;
             }
         }
         if ui.button("Move to Target").clicked() {
