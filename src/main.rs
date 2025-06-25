@@ -17,6 +17,19 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
 
+#[cfg(windows)]
+fn ensure_console() {
+    use windows::Win32::System::Console::{AttachConsole, AllocConsole, ATTACH_PARENT_PROCESS};
+    unsafe {
+        if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+            let _ = AllocConsole();
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn ensure_console() {}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Multi Manager window tool", long_about = None)]
 struct CliArgs {
@@ -53,6 +66,7 @@ struct CliArgs {
 /// }
 /// ```
 fn main() {
+    ensure_console();
     let args = CliArgs::parse();
 
     // Ensure logging is initialized

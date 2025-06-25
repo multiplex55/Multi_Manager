@@ -140,6 +140,8 @@ cargo run -- --save-desktops custom.json
 cargo run -- --load-desktops
 cargo run -- --load-desktops custom.json
 ```
+These commands print a confirmation message to the console when the layouts are
+saved or restored.
 
 ---
 
