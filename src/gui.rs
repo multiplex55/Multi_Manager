@@ -31,6 +31,8 @@ pub struct App {
     pub all_expanded: bool,
     pub expand_all_signal: Option<bool>,
     pub show_settings: bool,
+    pub auto_save: bool,
+    pub unsaved_changes: bool,
     pub save_on_exit: bool,
     pub log_level: String,
     pub last_layout_file: Option<String>,
@@ -187,6 +189,10 @@ impl EframeApp for App {
         if self.show_settings {
             self.render_settings_window(ctx);
         }
+
+        if self.auto_save && self.unsaved_changes {
+            self.save_workspaces();
+        }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -195,6 +201,7 @@ impl EframeApp for App {
         }
         save_settings(&Settings {
             save_on_exit: self.save_on_exit,
+            auto_save: self.auto_save,
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
         });
@@ -225,6 +232,7 @@ impl App {
                             self.last_layout_file = Some(chosen.clone());
                             save_settings(&Settings {
                                 save_on_exit: self.save_on_exit,
+                                auto_save: self.auto_save,
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                             });
@@ -245,6 +253,7 @@ impl App {
                             self.last_layout_file = Some(chosen.clone());
                             save_settings(&Settings {
                                 save_on_exit: self.save_on_exit,
+                                auto_save: self.auto_save,
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                             });
@@ -369,6 +378,7 @@ impl App {
         let mut move_up_index: Option<usize> = None;
         let mut move_down_index: Option<usize> = None;
 
+        let mut any_changed = false;
         egui::ScrollArea::both()
             .auto_shrink([false; 2])
             .show(ui, |ui| {
@@ -401,7 +411,9 @@ impl App {
                             });
                         })
                         .body(|ui| {
-                            workspace.render_details(ui, self);
+                            if workspace.render_details(ui, self) {
+                                any_changed = true;
+                            }
 
                             let mut context = WorkspaceControlContext {
                                 workspace_to_delete,
@@ -411,7 +423,9 @@ impl App {
                                 index: i,
                             };
 
-                            self.render_workspace_controls(ui, workspace, &mut context);
+                            if self.render_workspace_controls(ui, workspace, &mut context) {
+                                any_changed = true;
+                            }
                         });
 
                     // Attach right-click context menu to the header for renaming
@@ -423,6 +437,9 @@ impl App {
                     });
                 }
             });
+        if any_changed {
+            self.unsaved_changes = true;
+        }
 
         // Reset expand_all_signal after use
         self.expand_all_signal = None;
@@ -432,12 +449,14 @@ impl App {
             let mut workspaces = self.workspaces.lock().unwrap();
             if i > 0 {
                 workspaces.swap(i, i - 1);
+                self.unsaved_changes = true;
             }
         }
         if let Some(i) = move_down_index {
             let mut workspaces = self.workspaces.lock().unwrap();
             if i < workspaces.len() - 1 {
                 workspaces.swap(i, i + 1);
+                self.unsaved_changes = true;
             }
         }
 
@@ -471,6 +490,7 @@ impl App {
                 let mut workspaces = self.workspaces.lock().unwrap();
                 if let Some(ws) = workspaces.get_mut(index) {
                     ws.name = name_buf;
+                    self.unsaved_changes = true;
                 }
                 // Dialog stays closed
             } else if !close_dialog {
@@ -523,10 +543,13 @@ impl App {
         ui: &mut egui::Ui,
         workspace: &mut Workspace,
         context: &mut WorkspaceControlContext,
-    ) {
+    ) -> bool {
+        let mut changed = false;
         // Workspace disable checkbox
         ui.horizontal(|ui| {
-            ui.checkbox(&mut workspace.disabled, "Disable Workspace");
+            if ui.checkbox(&mut workspace.disabled, "Disable Workspace").changed() {
+                changed = true;
+            }
 
             if ui.button("Delete Workspace").clicked() {
                 let confirmation_message = format!(
@@ -535,6 +558,7 @@ impl App {
                 );
                 if show_confirmation_box(&confirmation_message, "Confirm Deletion") {
                     *context.workspace_to_delete = Some(context.index);
+                    changed = true;
                 }
             }
         });
@@ -542,11 +566,15 @@ impl App {
         ui.horizontal(|ui| {
             if context.index > 0 && ui.button("Move ⏶").clicked() {
                 *context.move_up_index = Some(context.index);
+                changed = true;
             }
             if context.index < context.workspaces_len - 1 && ui.button("Move ⏷").clicked() {
                 *context.move_down_index = Some(context.index);
+                changed = true;
             }
         });
+
+        changed
     }
 
     /// Saves the current list of workspaces to a JSON file.
@@ -577,9 +605,10 @@ impl App {
     /// # Logs
     /// - Logs a message when the workspaces are successfully saved.
     /// - Logs an error message if file creation or writing fails.
-    fn save_workspaces(&self) {
+    fn save_workspaces(&mut self) {
         let workspaces = self.workspaces.lock().unwrap();
         save_workspaces(&workspaces, "workspaces.json");
+        self.unsaved_changes = false;
         info!("Workspaces saved successfully.");
     }
 
@@ -613,9 +642,10 @@ impl App {
     /// # Notes
     /// - The function does not perform any validation or registration of hotkeys for the new workspace.
     /// - Any changes made to the workspace list are not persisted to disk until `save_workspaces` is called.
-    fn add_workspace(&self, workspace: Workspace) {
+    fn add_workspace(&mut self, workspace: Workspace) {
         let mut workspaces = self.workspaces.lock().unwrap();
         workspaces.push(workspace);
+        self.unsaved_changes = true;
     }
 
     /// Deletes a workspace from the list by its index.
@@ -645,7 +675,7 @@ impl App {
     ///
     /// # Error Conditions
     /// - Panics if the `index` is greater than or equal to the length of the `workspaces` list.
-    fn delete_workspace(&self, index: usize) {
+    fn delete_workspace(&mut self, index: usize) {
         let mut workspaces = self.workspaces.lock().unwrap();
         if let Some(workspace) = workspaces.get_mut(index) {
             if let Some(ref hotkey) = workspace.hotkey {
@@ -653,6 +683,7 @@ impl App {
             }
         }
         workspaces.remove(index);
+        self.unsaved_changes = true;
     }
 
     /// Displays the settings window when `self.show_settings` is `true`.
@@ -670,8 +701,18 @@ impl App {
                 if response.changed() {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
+                        auto_save: self.auto_save,
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
+                    });
+                }
+                let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
+                if auto_response.changed() {
+                    save_settings(&Settings {
+                        save_on_exit: self.save_on_exit,
+                        auto_save: self.auto_save,
+                        log_level: self.log_level.clone(),
+                        last_layout_file: self.last_layout_file.clone(),
                     });
                 }
                 let mut changed = false;
@@ -687,6 +728,7 @@ impl App {
                 if changed {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
+                        auto_save: self.auto_save,
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                     });
@@ -702,6 +744,7 @@ impl App {
                         }
                         save_settings(&Settings {
                             save_on_exit: self.save_on_exit,
+                            auto_save: self.auto_save,
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
                         });

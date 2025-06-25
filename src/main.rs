@@ -110,6 +110,8 @@ fn main() {
         all_expanded: true,
         expand_all_signal: None,
         show_settings: false,
+        auto_save: settings.auto_save,
+        unsaved_changes: false,
         save_on_exit: settings.save_on_exit,
         log_level: settings.log_level.clone(),
         last_layout_file: settings.last_layout_file.clone(),
