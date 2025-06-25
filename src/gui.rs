@@ -274,6 +274,11 @@ impl App {
                         }
                     });
                     ui.menu_button("Workspace Management", |ui| {
+                        if ui.button("Save Workspaces...").clicked() {
+                            self.save_workspaces();
+                            show_message_box("Workspaces saved successfully!", "Save");
+                            ui.close_menu();
+                        }
                         if ui.button("Load Workspaces...").clicked() {
                             let default_path = self
                                 .last_workspace_file
@@ -301,10 +306,9 @@ impl App {
     ///
     /// This function displays:
     /// - The application's title.
-    /// - Buttons for saving workspaces and adding a new workspace.
+    /// - Controls for adding a new workspace and managing the workspace list.
     ///
     /// # Behavior
-    /// - The "Save Workspaces" button triggers saving the current workspaces to a file.
     /// - The "Add New Workspace" button creates a new workspace with a default name and adds it to the list.
     ///
     /// # Example
@@ -323,11 +327,10 @@ impl App {
     ///
     /// # Parameters
     /// - `ui: &mut egui::Ui`: The UI context for rendering the header.
-    /// - `save_flag: &mut bool`: A flag that is set to `true` when the "Save Workspaces" button is clicked.
+    /// - `save_flag: &mut bool`: Reserved for future use.
     /// - `new_workspace: &mut Option<Workspace>`: A mutable reference to store a newly created workspace.
     ///
     /// # Side Effects
-    /// - Sets the `save_flag` to `true` when the "Save Workspaces" button is clicked.
     /// - Adds a new workspace to `new_workspace` when the "Add New Workspace" button is clicked.
     ///
     /// # Notes
@@ -340,10 +343,6 @@ impl App {
     ) {
         ui.heading(&self.app_title_name);
         ui.horizontal(|ui| {
-            if ui.button("Save Workspaces").clicked() {
-                *save_flag = true;
-                show_message_box("Workspaces saved successfully!", "Save");
-            }
             if ui.button("Add New Workspace").clicked() {
                 let workspaces = self.workspaces.lock().unwrap();
                 *new_workspace = Some(Workspace {
