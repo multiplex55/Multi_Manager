@@ -30,6 +30,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
   - Optional auto-save to persist changes automatically.
 - **Desktop Management**:
   - Save and restore window layouts across all virtual desktops from the **File -> Desktop Management** menu.
+  - Move all windows back to their original monitors with the **Move All to Origin** function.
 - **Visual Feedback**:
   - Color-coded HWND validity indicators for associated windows.
   - Popup dialogs for feedback (e.g., workspace saved successfully).
@@ -129,6 +130,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 1. Open **File -> Desktop Management**.
 2. Choose **Save All Desktops** to store the current window layout.
 3. Choose **Restore All Desktops** to reload the saved layout.
+4. Select **File -> Desktop Management -> Move All to Origin** and confirm the prompt.
 
 ### Command Line Examples
 
