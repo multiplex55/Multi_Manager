@@ -18,6 +18,9 @@ pub struct Settings {
     /// Optional path to the last desktop layout file used.
     #[serde(default)]
     pub last_layout_file: Option<String>,
+    /// Optional path to the last workspace file used.
+    #[serde(default)]
+    pub last_workspace_file: Option<String>,
 }
 
 impl Default for Settings {
@@ -28,6 +31,7 @@ impl Default for Settings {
             auto_save: false,
             log_level: "info".to_string(),
             last_layout_file: None,
+            last_workspace_file: None,
         }
     }
 }
@@ -84,6 +88,7 @@ mod tests {
             auto_save: true,
             log_level: "debug".to_string(),
             last_layout_file: Some("file.json".into()),
+            last_workspace_file: Some("work.json".into()),
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -92,6 +97,7 @@ mod tests {
         assert_eq!(loaded.auto_save, true);
         assert_eq!(loaded.log_level, "debug");
         assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
+        assert_eq!(loaded.last_workspace_file.as_deref(), Some("work.json"));
     }
 
     #[test]
@@ -103,6 +109,7 @@ mod tests {
             auto_save: false,
             log_level: "info".to_string(),
             last_layout_file: None,
+            last_workspace_file: None,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -111,5 +118,6 @@ mod tests {
         assert_eq!(loaded.auto_save, false);
         assert_eq!(loaded.log_level, "info");
         assert_eq!(loaded.last_layout_file, None);
+        assert_eq!(loaded.last_workspace_file, None);
     }
 }

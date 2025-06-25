@@ -37,6 +37,7 @@ pub struct App {
     pub save_on_exit: bool,
     pub log_level: String,
     pub last_layout_file: Option<String>,
+    pub last_workspace_file: Option<String>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -95,7 +96,11 @@ pub struct WorkspaceControlContext<'a> {
 pub fn run_gui(app: App) {
     {
         let mut workspaces = app.workspaces.lock().unwrap();
-        *workspaces = load_workspaces("workspaces.json", &app);
+        let path = app
+            .last_workspace_file
+            .clone()
+            .unwrap_or_else(|| "workspaces.json".to_string());
+        *workspaces = load_workspaces(&path, &app);
     }
 
     app.validate_initial_hotkeys();
@@ -205,6 +210,7 @@ impl EframeApp for App {
             auto_save: self.auto_save,
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
+            last_workspace_file: self.last_workspace_file.clone(),
         });
     }
 }
@@ -236,6 +242,7 @@ impl App {
                                 auto_save: self.auto_save,
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
+                                last_workspace_file: self.last_workspace_file.clone(),
                             });
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
@@ -257,11 +264,28 @@ impl App {
                                 auto_save: self.auto_save,
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
+                                last_workspace_file: self.last_workspace_file.clone(),
                             });
                             ui.close_menu();
                         }
                         if ui.button("Move All to Origin").clicked() {
                             move_all_to_origin();
+                            ui.close_menu();
+                        }
+                    });
+                    ui.menu_button("Workspace Management", |ui| {
+                        if ui.button("Load Workspaces...").clicked() {
+                            let default_path = self
+                                .last_workspace_file
+                                .clone()
+                                .unwrap_or_else(|| "workspaces.json".to_string());
+                            if let Some(chosen) = rfd::FileDialog::new()
+                                .set_file_name(&default_path)
+                                .pick_file()
+                                .map(|p| p.to_string_lossy().to_string())
+                            {
+                                self.load_workspaces_from_file(&chosen);
+                            }
                             ui.close_menu();
                         }
                     });
@@ -709,6 +733,7 @@ impl App {
                         auto_save: self.auto_save,
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
+                        last_workspace_file: self.last_workspace_file.clone(),
                     });
                 }
                 let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
@@ -718,6 +743,7 @@ impl App {
                         auto_save: self.auto_save,
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
+                        last_workspace_file: self.last_workspace_file.clone(),
                     });
                 }
                 let mut changed = false;
@@ -736,6 +762,7 @@ impl App {
                         auto_save: self.auto_save,
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
+                        last_workspace_file: self.last_workspace_file.clone(),
                     });
                 }
                 let mut path = self.last_layout_file.clone().unwrap_or_default();
@@ -752,6 +779,7 @@ impl App {
                             auto_save: self.auto_save,
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
+                            last_workspace_file: self.last_workspace_file.clone(),
                         });
                     }
                 });
@@ -822,5 +850,35 @@ impl App {
             }
             *initial_validation_done = true;
         }
+    }
+
+    /// Load workspaces from the specified file, replacing current ones.
+    ///
+    /// This unregisters existing hotkeys, loads the new workspace list and
+    /// stores the provided path in `last_workspace_file` and the settings file.
+    pub fn load_workspaces_from_file(&mut self, path: &str) {
+        {
+            let mut workspaces = self.workspaces.lock().unwrap();
+            for ws in workspaces.iter_mut() {
+                if let Some(ref hotkey) = ws.hotkey {
+                    hotkey.unregister(self);
+                }
+            }
+        }
+
+        {
+            let mut workspaces = self.workspaces.lock().unwrap();
+            *workspaces = load_workspaces(path, self);
+        }
+
+        self.last_workspace_file = Some(path.to_string());
+        self.unsaved_changes = false;
+        save_settings(&Settings {
+            save_on_exit: self.save_on_exit,
+            auto_save: self.auto_save,
+            log_level: self.log_level.clone(),
+            last_layout_file: self.last_layout_file.clone(),
+            last_workspace_file: self.last_workspace_file.clone(),
+        });
     }
 }
