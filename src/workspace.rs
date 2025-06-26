@@ -112,31 +112,29 @@ impl Workspace {
     ///
     /// The `app` reference is required so that the hotkey can be unregistered
     /// when resetting it back to the default state.
-    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) -> bool {
+    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) -> (bool, bool) {
         let mut changed = false;
+        let mut open_dialog = false;
         // Hotkey section
         ui.horizontal(|ui| {
             ui.label("Hotkey:");
-
-            let mut temp_hotkey = self
+            let current = self
                 .hotkey
                 .as_ref()
                 .map(|h| h.key_sequence.clone())
                 .unwrap_or_else(|| "None".to_string());
-            let response = ui.text_edit_singleline(&mut temp_hotkey);
-            let mut reset_clicked = false;
+            ui.label(&current);
+            if ui.button("Set").clicked() {
+                open_dialog = true;
+            }
             if self.hotkey.is_some() {
-                reset_clicked = ui.button("Reset").clicked();
+                if ui.button("Reset").clicked() {
+                    self.reset_hotkey(app);
+                    changed = true;
+                }
             }
 
-            if reset_clicked {
-                self.reset_hotkey(app);
-                changed = true;
-            } else if response.changed() {
-                // Always attempt to set the hotkey, but handle validation only when enabled
-                let _ = self.set_hotkey(&temp_hotkey);
-                changed = true;
-            } else if !self.disabled {
+            if !self.disabled {
                 if let Some(hotkey) = self.hotkey.as_ref() {
                     if is_valid_key_combo(&hotkey.key_sequence) {
                         let valid_label = ui.colored_label(egui::Color32::GREEN, "Valid");
@@ -156,12 +154,12 @@ impl Workspace {
                         );
                     }
                 } else {
-                    let invalid_label = ui.colored_label(egui::Color32::GRAY, "Edit to validate");
+                    let invalid_label = ui.colored_label(egui::Color32::GRAY, "Set to validate");
                     Self::attach_context_menu(
                         ui,
                         &invalid_label,
                         "Invalid Hotkey Options",
-                        &temp_hotkey,
+                        &current,
                     );
                 }
             } else {
@@ -306,7 +304,7 @@ impl Workspace {
             }
         }
 
-        changed
+        (changed, open_dialog)
     }
 
     /// Attaches a context menu to a UI widget.
