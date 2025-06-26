@@ -5,6 +5,7 @@ use crate::window_manager::listen_for_keys_with_dialog_and_window;
 use crate::window_manager::move_window;
 use crate::window_manager::*;
 use eframe::egui;
+use eframe::egui::load::SizedTexture;
 use log::{error, info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -195,7 +196,15 @@ impl Workspace {
 
         for (i, window) in windows.into_iter().enumerate() {
             ui.horizontal(|ui| {
-                // Display window title
+                update_window_thumbnail(window, ui.ctx());
+                if let Some(tex) = &window.thumbnail {
+                    let size = tex.size();
+                    let mut vec = egui::vec2(size[0] as f32, size[1] as f32);
+                    let max = 64.0;
+                    let scale = (max / vec.x).min(max / vec.y).min(1.0);
+                    vec *= scale;
+                    ui.image(egui::load::SizedTexture::new(tex.id(), vec));
+                }
                 ui.label(&window.title);
 
                 if i > 0 && ui.button("Move ⏶").clicked() {
@@ -314,6 +323,7 @@ impl Workspace {
                     home: (0, 0, 800, 600),
                     target: (0, 0, 800, 600),
                     valid: true,
+                    thumbnail: None,
                 });
                 changed = true;
             }
@@ -557,6 +567,8 @@ pub struct Window {
     pub home: (i32, i32, i32, i32),
     pub target: (i32, i32, i32, i32),
     pub valid: bool,
+    #[serde(skip)]
+    pub thumbnail: Option<egui::TextureHandle>,
 }
 
 /// Checks whether the provided `input` string (e.g., `"Ctrl+Alt+F5"`, `"Win+Shift+Z"`) matches a valid hotkey pattern.
@@ -739,6 +751,126 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
                 file_path, e
             );
             Vec::new()
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
+    use windows::Win32::Graphics::Gdi::*;
+    unsafe {
+        let mut rect = RECT::default();
+        if !GetWindowRect(hwnd, &mut rect).as_bool() {
+            return None;
+        }
+
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+
+        let hdc_window = GetWindowDC(hwnd);
+        if hdc_window.0 == 0 {
+            return None;
+        }
+        let hdc_mem = CreateCompatibleDC(hdc_window);
+        let hbmp = CreateCompatibleBitmap(hdc_window, width, height);
+        if hbmp.0 == 0 {
+            DeleteDC(hdc_mem);
+            ReleaseDC(hwnd, hdc_window);
+            return None;
+        }
+
+        SelectObject(hdc_mem, HGDIOBJ(hbmp.0));
+
+        if !PrintWindow(hwnd, hdc_mem, 0).as_bool() {
+            BitBlt(hdc_mem, 0, 0, width, height, hdc_window, 0, 0, SRCCOPY);
+        }
+
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB as u32,
+                ..Default::default()
+            },
+            bmiColors: [RGBQUAD::default(); 1],
+        };
+
+        let mut buf = vec![0u8; (width * height * 4) as usize];
+        if GetDIBits(
+            hdc_mem,
+            hbmp,
+            0,
+            height as u32,
+            Some(buf.as_mut_ptr() as *mut _),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        ) == 0
+        {
+            DeleteObject(HGDIOBJ(hbmp.0));
+            DeleteDC(hdc_mem);
+            ReleaseDC(hwnd, hdc_window);
+            return None;
+        }
+
+        let mut pixels = Vec::with_capacity((width * height) as usize);
+        for i in 0..(width * height) as usize {
+            let b = buf[i * 4];
+            let g = buf[i * 4 + 1];
+            let r = buf[i * 4 + 2];
+            let a = buf[i * 4 + 3];
+            pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+        }
+
+        DeleteObject(HGDIOBJ(hbmp.0));
+        DeleteDC(hdc_mem);
+        ReleaseDC(hwnd, hdc_window);
+
+        Some(egui::ColorImage {
+            size: [width as usize, height as usize],
+            pixels,
+        })
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn capture_window_image(_hwnd: HWND) -> Option<egui::ColorImage> {
+    None
+}
+
+fn downscale(img: &egui::ColorImage, max_dim: usize) -> egui::ColorImage {
+    let (w, h) = (img.size[0], img.size[1]);
+    let max_src = w.max(h);
+    if max_src <= max_dim {
+        return img.clone();
+    }
+    let scale = max_dim as f32 / max_src as f32;
+    let new_w = (w as f32 * scale) as usize;
+    let new_h = (h as f32 * scale) as usize;
+    let mut pixels = Vec::with_capacity(new_w * new_h);
+    for y in 0..new_h {
+        for x in 0..new_w {
+            let src_x = ((x as f32 / new_w as f32) * w as f32) as usize;
+            let src_y = ((y as f32 / new_h as f32) * h as f32) as usize;
+            pixels.push(img.pixels[src_y * w + src_x]);
+        }
+    }
+    egui::ColorImage { size: [new_w, new_h], pixels }
+}
+
+pub fn update_window_thumbnail(window: &mut Window, ctx: &egui::Context) {
+    if let Some(img) = capture_window_image(HWND(window.id as isize as _)) {
+        let img = downscale(&img, 128);
+        if let Some(tex) = &mut window.thumbnail {
+            tex.set(img, egui::TextureOptions::LINEAR);
+        } else {
+            window.thumbnail = Some(ctx.load_texture(
+                format!("thumb_{}", window.id),
+                img,
+                egui::TextureOptions::LINEAR,
+            ));
         }
     }
 }
