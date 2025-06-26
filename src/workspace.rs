@@ -43,7 +43,7 @@ impl Workspace {
     ///
     /// # Returns
     /// - `Ok(())` if the hotkey is valid and successfully set.
-    /// - `Err` with an error message if the hotkey is invalid.
+    /// - `Err` with an error message if the hotkey is invalid or fails to register.
     ///
     /// # Example
     /// ```
@@ -66,10 +66,12 @@ impl Workspace {
                 };
 
                 // Try to register immediately so the map stays accurate
-                new_hotkey.register(app, id);
-
-                self.hotkey = Some(new_hotkey);
-                Ok(())
+                if new_hotkey.register(app, id) {
+                    self.hotkey = Some(new_hotkey);
+                    Ok(())
+                } else {
+                    Err(format!("Failed to register hotkey: {}", hotkey))
+                }
             }
             Err(e) => Err(e),
         }
