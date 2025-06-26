@@ -29,6 +29,7 @@ pub struct App {
     pub initial_validation_done: Arc<Mutex<bool>>,
     pub registered_hotkeys: Arc<Mutex<HashMap<String, usize>>>,
     pub rename_dialog: Option<(usize, String)>,
+    pub hotkey_dialog: Option<(usize, String)>,
     pub all_expanded: bool,
     pub expand_all_signal: Option<bool>,
     pub show_settings: bool,
@@ -407,6 +408,7 @@ impl App {
         let mut move_down_index: Option<usize> = None;
 
         let mut any_changed = false;
+        let mut requested_hotkey: Option<usize> = None;
         egui::ScrollArea::both()
             .auto_shrink([false; 2])
             .show(ui, |ui| {
@@ -439,8 +441,12 @@ impl App {
                             });
                         })
                         .body(|ui| {
-                            if workspace.render_details(ui, self) {
+                            let (changed, open_dialog) = workspace.render_details(ui, self);
+                            if changed {
                                 any_changed = true;
+                            }
+                            if open_dialog {
+                                requested_hotkey = Some(i);
                             }
 
                             let mut context = WorkspaceControlContext {
@@ -488,6 +494,10 @@ impl App {
             }
         }
 
+        if let Some(idx) = requested_hotkey {
+            self.hotkey_dialog = Some((idx, String::new()));
+        }
+
         // Take the dialog state out to avoid borrow conflicts
         if let Some((index, mut name_buf)) = self.rename_dialog.take() {
             let mut close_dialog = false;
@@ -526,6 +536,58 @@ impl App {
                 self.rename_dialog = Some((index, name_buf));
             }
             // else: Dialog cancelled, don't put it back
+        }
+
+        // Hotkey capture dialog
+        if let Some((index, mut sequence)) = self.hotkey_dialog.take() {
+            let mut close_dialog = false;
+            let mut confirm = false;
+
+            egui::Window::new("Set Hotkey")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.label("Press combination then press Enter or click OK");
+                    ui.label(format!("Current: {}", if sequence.is_empty() { "<none>" } else { &sequence }));
+
+                    ui.ctx().input(|i| {
+                        for ev in &i.events {
+                            if let egui::Event::Key { key, pressed: true, .. } = ev {
+                                if *key == egui::Key::Escape {
+                                    close_dialog = true;
+                                } else if *key == egui::Key::Enter {
+                                    if !sequence.is_empty() { confirm = true; }
+                                } else {
+                                    let mut parts = Vec::new();
+                                    if i.modifiers.ctrl { parts.push("Ctrl"); }
+                                    if i.modifiers.alt { parts.push("Alt"); }
+                                    if i.modifiers.shift { parts.push("Shift"); }
+                                    if i.modifiers.command { parts.push("Win"); }
+                                    parts.push(key.name());
+                                    sequence = parts.join("+");
+                                }
+                            }
+                        }
+                    });
+
+                    ui.horizontal(|ui| {
+                        if ui.button("OK").clicked() {
+                            if !sequence.is_empty() { confirm = true; }
+                        }
+                        if ui.button("Cancel").clicked() { close_dialog = true; }
+                    });
+                });
+
+            if confirm {
+                let mut workspaces = self.workspaces.lock().unwrap();
+                if let Some(ws) = workspaces.get_mut(index) {
+                    let _ = ws.set_hotkey(&sequence);
+                    self.unsaved_changes = true;
+                }
+            } else if !close_dialog {
+                self.hotkey_dialog = Some((index, sequence));
+            }
         }
     }
 
