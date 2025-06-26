@@ -52,9 +52,22 @@ impl Workspace {
     ///     println!("Failed to set hotkey: {}", e);
     /// }
     /// ```
-    pub fn set_hotkey(&mut self, hotkey: &str) -> Result<(), String> {
+    pub fn set_hotkey(&mut self, app: &App, hotkey: &str) -> Result<(), String> {
         match Hotkey::new(hotkey) {
-            Ok(new_hotkey) => {
+            Ok(mut new_hotkey) => {
+                if let Some(ref old_hotkey) = self.hotkey {
+                    old_hotkey.unregister(app);
+                }
+
+                // Pick a unique id for the new hotkey
+                let id = {
+                    let registered = app.registered_hotkeys.lock().unwrap();
+                    registered.values().max().copied().unwrap_or(0) as i32 + 1
+                };
+
+                // Try to register immediately so the map stays accurate
+                new_hotkey.register(app, id);
+
                 self.hotkey = Some(new_hotkey);
                 Ok(())
             }
