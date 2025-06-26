@@ -117,6 +117,16 @@ fn main() {
         return;
     }
 
+    if let Some(file) = args.save_workspaces {
+        cli_save_workspaces(&file);
+        return;
+    }
+
+    if let Some(file) = args.load_workspaces {
+        cli_load_workspaces(&file);
+        return;
+    }
+
     if args.move_origin {
         move_all_to_origin();
         return;
@@ -128,7 +138,7 @@ fn main() {
     }
 
     if args.edit_settings {
-        launch_settings_editor();
+        edit_settings();
         return;
     }
 
@@ -161,14 +171,68 @@ fn main() {
 
 /// Open the folder containing `multi_manager.log` in Windows Explorer.
 fn open_log_folder() {
+    use crate::utils::show_error_box;
+
     let log_path = std::fs::canonicalize("multi_manager.log")
         .unwrap_or_else(|_| PathBuf::from("multi_manager.log"));
-    let _ = Command::new("explorer").arg(&log_path).spawn();
+
+    if let Err(e) = Command::new("explorer").arg(&log_path).spawn() {
+        show_error_box(&format!("Failed to open log folder: {}", e), "Error");
+    }
 }
 
 /// Launch a text editor to modify `settings.json`.
-fn launch_settings_editor() {
-    let _ = Command::new("notepad").arg("settings.json").spawn();
+fn edit_settings() {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("notepad").arg("settings.json").spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg("settings.json").spawn();
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        let _ = Command::new("xdg-open").arg("settings.json").spawn();
+    }
+}
+
+fn cli_save_workspaces(path: &str) {
+    use std::fs;
+    match fs::read_to_string("workspaces.json") {
+        Ok(content) => {
+            if let Err(e) = fs::write(path, content) {
+                eprintln!("Failed to save workspaces: {}", e);
+            } else {
+                println!("Saved workspaces to {}", path);
+            }
+        }
+        Err(e) => eprintln!("Failed to read workspaces.json: {}", e),
+    }
+}
+
+fn cli_load_workspaces(path: &str) {
+    use std::fs;
+    use crate::workspace::Workspace;
+
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to read '{}': {}", path, e);
+            return;
+        }
+    };
+
+    if serde_json::from_str::<Vec<Workspace>>(&content).is_err() {
+        eprintln!("Invalid workspace JSON: {}", path);
+        return;
+    }
+
+    if let Err(e) = fs::write("workspaces.json", &content) {
+        eprintln!("Failed to write workspaces.json: {}", e);
+    } else {
+        println!("Loaded workspaces from {}", path);
+    }
 }
 
 /// Ensures that a valid `log4rs.yaml` logging configuration file exists and initializes the logger.
