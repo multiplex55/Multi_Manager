@@ -90,7 +90,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 
 3. Run the application:
    ```bash
-   cargo run
+   multi-manager
    ```
 
 ---
@@ -134,17 +134,34 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 
 ### Command Line Examples
 
-Run the application with optional arguments to save or load all desktop layouts:
+Run the application with optional arguments:
 
 ```bash
-cargo run -- --help
-cargo run -- --save-desktops
-cargo run -- --save-desktops custom.json
-cargo run -- --load-desktops
-cargo run -- --load-desktops custom.json
+# Display available flags
+multi-manager --help
+
+# Save or load desktop layouts (defaults to desktop_layout.json)
+multi-manager --save-desktops
+multi-manager --save-desktops custom_layout.json
+multi-manager --load-desktops
+multi-manager --load-desktops custom_layout.json
+
+# Save or load workspace data (defaults to workspaces.json)
+multi-manager --save-workspaces
+multi-manager --save-workspaces my_workspaces.json
+multi-manager --load-workspaces
+multi-manager --load-workspaces my_workspaces.json
+
+# Utility commands
+multi-manager --move-origin       # centers every visible window
+multi-manager --open-log-folder   # opens the folder with multi_manager.log
+multi-manager --edit-settings     # opens settings.json in a text editor
 ```
-These commands print a confirmation message to the console when the layouts are
-saved or restored.
+
+Saving or loading prints messages like `Saved desktops to desktop_layout.json` or
+`Loaded workspaces from my_workspaces.json`. The move-origin command prompts for
+confirmation and shows a completion dialog. The log and settings commands open
+Explorer or your editor without additional console output.
 
 ---
 
