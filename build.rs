@@ -1,7 +1,11 @@
+#[cfg(target_os = "windows")]
 use std::fs::File;
+#[cfg(target_os = "windows")]
 use std::io::Write;
+#[cfg(target_os = "windows")]
 use std::process;
 
+#[cfg(target_os = "windows")]
 fn log_to_file(message: &str) {
     let mut file = File::options()
         .append(true) // Enable appending
