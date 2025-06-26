@@ -8,9 +8,10 @@ mod workspace;
 mod settings;
 mod virtual_desktop;
 mod desktop_window_info;
+mod cli;
 
 use log::info;
-use clap::{ArgAction, Parser};
+use crate::cli::CliArgs;
 use crate::settings::load_settings;
 use crate::window_manager::{
     capture_all_desktops,
@@ -36,30 +37,6 @@ fn ensure_console() {
 #[cfg(not(windows))]
 fn ensure_console() {}
 
-#[derive(Parser, Debug)]
-#[command(author, version, about = "Multi Manager window tool", long_about = None)]
-struct CliArgs {
-    #[arg(long = "save-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
-    save_desktops: Option<String>,
-
-    #[arg(long = "load-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
-    load_desktops: Option<String>,
-
-    #[arg(long = "move-origin", action = ArgAction::SetTrue)]
-    move_origin: bool,
-
-    #[arg(long = "save-workspaces", default_missing_value = "workspaces.json", num_args = 0..=1)]
-    save_workspaces: Option<String>,
-
-    #[arg(long = "load-workspaces", default_missing_value = "workspaces.json", num_args = 0..=1)]
-    load_workspaces: Option<String>,
-
-    #[arg(long = "open-log-folder", action = ArgAction::SetTrue)]
-    open_log_folder: bool,
-
-    #[arg(long = "edit-settings", action = ArgAction::SetTrue)]
-    edit_settings: bool,
-}
 
 /// The main entry point for the Multi Manager application.
 ///
