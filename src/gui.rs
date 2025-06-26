@@ -295,6 +295,10 @@ impl App {
                             ui.close_menu();
                         }
                     });
+                    if ui.button("Open Log Folder").clicked() {
+                        self.open_log_folder();
+                        ui.close_menu();
+                    }
                     if ui.button("Settings").clicked() {
                         self.show_settings = true;
                         ui.close_menu();
@@ -854,6 +858,19 @@ impl App {
     fn send_all_home(&self) {
         let mut workspaces = self.workspaces.lock().unwrap();
         send_all_windows_home(&mut workspaces);
+    }
+
+    /// Open the folder containing `multi_manager.log` using Windows Explorer.
+    fn open_log_folder(&self) {
+        use std::path::PathBuf;
+        use std::process::Command;
+
+        let log_path = std::fs::canonicalize("multi_manager.log")
+            .unwrap_or_else(|_| PathBuf::from("multi_manager.log"));
+
+        if let Err(e) = Command::new("explorer").arg(&log_path).spawn() {
+            show_error_box(&format!("Failed to open log folder: {}", e), "Error");
+        }
     }
 
     /// Validates and registers hotkeys for all workspaces during initialization.
