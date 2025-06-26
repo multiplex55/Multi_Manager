@@ -83,3 +83,29 @@ pub fn show_confirmation_box(message: &str, title: &str) -> bool {
         result == windows::Win32::UI::WindowsAndMessaging::MESSAGEBOX_RESULT(6) // IDYES is defined as 6
     }
 }
+
+/// Display an error message box with an "OK" button.
+///
+/// This is similar to [`show_message_box`] but uses a red error icon.
+pub fn show_error_box(message: &str, title: &str) {
+    unsafe {
+        MessageBoxW(
+            HWND(ptr::null_mut()),
+            PCWSTR(
+                message
+                    .encode_utf16()
+                    .chain(Some(0))
+                    .collect::<Vec<u16>>()
+                    .as_ptr(),
+            ),
+            PCWSTR(
+                title
+                    .encode_utf16()
+                    .chain(Some(0))
+                    .collect::<Vec<u16>>()
+                    .as_ptr(),
+            ),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
