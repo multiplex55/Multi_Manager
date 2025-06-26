@@ -37,15 +37,6 @@ image = "0.25.5"
 rfd = "0.15"
 clap = { version = "4", features = ["derive"] }
 
-[features]
-default = []
-windows-binary = []
-
-[[bin]]
-name = "multi-manager"
-path = "src/main.rs"
-required-features = ["windows-binary"]
-
 [profile.release]
 opt-level = 0
 debug = true
