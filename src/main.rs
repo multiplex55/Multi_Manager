@@ -10,9 +10,15 @@ mod virtual_desktop;
 mod desktop_window_info;
 
 use log::info;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use crate::settings::load_settings;
-use crate::window_manager::{capture_all_desktops, restore_all_desktops};
+use crate::window_manager::{
+    capture_all_desktops,
+    restore_all_desktops,
+    move_all_to_origin,
+};
+use std::path::PathBuf;
+use std::process::Command;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -38,6 +44,21 @@ struct CliArgs {
 
     #[arg(long = "load-desktops", default_missing_value = "desktop_layout.json", num_args = 0..=1)]
     load_desktops: Option<String>,
+
+    #[arg(long = "move-origin", action = ArgAction::SetTrue)]
+    move_origin: bool,
+
+    #[arg(long = "save-workspaces", default_missing_value = "workspaces.json", num_args = 0..=1)]
+    save_workspaces: Option<String>,
+
+    #[arg(long = "load-workspaces", default_missing_value = "workspaces.json", num_args = 0..=1)]
+    load_workspaces: Option<String>,
+
+    #[arg(long = "open-log-folder", action = ArgAction::SetTrue)]
+    open_log_folder: bool,
+
+    #[arg(long = "edit-settings", action = ArgAction::SetTrue)]
+    edit_settings: bool,
 }
 
 /// The main entry point for the Multi Manager application.
@@ -96,6 +117,21 @@ fn main() {
         return;
     }
 
+    if args.move_origin {
+        move_all_to_origin();
+        return;
+    }
+
+    if args.open_log_folder {
+        open_log_folder();
+        return;
+    }
+
+    if args.edit_settings {
+        launch_settings_editor();
+        return;
+    }
+
     let settings = load_settings();
 
     // Initialize the application states
@@ -121,6 +157,18 @@ fn main() {
 
     // Launch GUI and set the taskbar icon after creating the window
     gui::run_gui(app);
+}
+
+/// Open the folder containing `multi_manager.log` in Windows Explorer.
+fn open_log_folder() {
+    let log_path = std::fs::canonicalize("multi_manager.log")
+        .unwrap_or_else(|_| PathBuf::from("multi_manager.log"));
+    let _ = Command::new("explorer").arg(&log_path).spawn();
+}
+
+/// Launch a text editor to modify `settings.json`.
+fn launch_settings_editor() {
+    let _ = Command::new("notepad").arg("settings.json").spawn();
 }
 
 /// Ensures that a valid `log4rs.yaml` logging configuration file exists and initializes the logger.
