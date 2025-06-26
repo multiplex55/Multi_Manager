@@ -582,7 +582,7 @@ impl App {
             if confirm {
                 let mut workspaces = self.workspaces.lock().unwrap();
                 if let Some(ws) = workspaces.get_mut(index) {
-                    let _ = ws.set_hotkey(&sequence);
+                    let _ = ws.set_hotkey(self, &sequence);
                     self.unsaved_changes = true;
                 }
             } else if !close_dialog {
