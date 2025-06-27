@@ -761,10 +761,11 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
 fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::Graphics::Gdi::*;
-    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, PrintWindow};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
     unsafe {
         let mut rect = RECT::default();
-        if !GetWindowRect(hwnd, &mut rect).as_bool() {
+        if GetWindowRect(hwnd, &mut rect).is_err() {
             return None;
         }
 
@@ -776,6 +777,10 @@ fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
             return None;
         }
         let hdc_mem = CreateCompatibleDC(hdc_window);
+        if hdc_mem.0.is_null() {
+            ReleaseDC(hwnd, hdc_window);
+            return None;
+        }
         let hbmp = CreateCompatibleBitmap(hdc_window, width, height);
         if hbmp.0.is_null() {
             DeleteDC(hdc_mem);
@@ -785,7 +790,7 @@ fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
 
         SelectObject(hdc_mem, HGDIOBJ(hbmp.0));
 
-        if !PrintWindow(hwnd, hdc_mem, 0).as_bool() {
+        if !PrintWindow(hwnd, hdc_mem, PRINT_WINDOW_FLAGS(0)).as_bool() {
             BitBlt(hdc_mem, 0, 0, width, height, hdc_window, 0, 0, SRCCOPY);
         }
 
