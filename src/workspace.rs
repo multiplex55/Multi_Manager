@@ -15,6 +15,9 @@ use std::io::{Read, Write};
 use windows::Win32::Foundation::HWND;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+#[cfg(not(target_os = "windows"))]
+#[derive(Clone, Copy)]
+struct HWND(pub isize);
 
 /// Represents a workspace, which groups multiple windows and allows toggling between specific positions.
 ///
@@ -773,16 +776,16 @@ fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
         let height = rect.bottom - rect.top;
 
         let hdc_window = GetWindowDC(hwnd);
-        if hdc_window.0.is_null() {
+        if hdc_window.is_invalid() {
             return None;
         }
         let hdc_mem = CreateCompatibleDC(hdc_window);
-        if hdc_mem.0.is_null() {
+        if hdc_mem.is_invalid() {
             ReleaseDC(hwnd, hdc_window);
             return None;
         }
         let hbmp = CreateCompatibleBitmap(hdc_window, width, height);
-        if hbmp.0.is_null() {
+        if hbmp.is_invalid() {
             DeleteDC(hdc_mem);
             ReleaseDC(hwnd, hdc_window);
             return None;
