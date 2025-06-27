@@ -11,7 +11,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 
 /// Represents a workspace, which groups multiple windows and allows toggling between specific positions.
@@ -757,7 +759,9 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
 
 #[cfg(target_os = "windows")]
 fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
+    use windows::Win32::Foundation::RECT;
     use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, PrintWindow};
     unsafe {
         let mut rect = RECT::default();
         if !GetWindowRect(hwnd, &mut rect).as_bool() {
@@ -768,12 +772,12 @@ fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
         let height = rect.bottom - rect.top;
 
         let hdc_window = GetWindowDC(hwnd);
-        if hdc_window.0 == 0 {
+        if hdc_window.0.is_null() {
             return None;
         }
         let hdc_mem = CreateCompatibleDC(hdc_window);
         let hbmp = CreateCompatibleBitmap(hdc_window, width, height);
-        if hbmp.0 == 0 {
+        if hbmp.0.is_null() {
             DeleteDC(hdc_mem);
             ReleaseDC(hwnd, hdc_window);
             return None;
@@ -792,7 +796,7 @@ fn capture_window_image(hwnd: HWND) -> Option<egui::ColorImage> {
                 biHeight: -height,
                 biPlanes: 1,
                 biBitCount: 32,
-                biCompression: BI_RGB as u32,
+                biCompression: BI_RGB.0,
                 ..Default::default()
             },
             bmiColors: [RGBQUAD::default(); 1],
