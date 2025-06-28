@@ -20,6 +20,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Duration to display the last triggered hotkey notification overlay.
+const HOTKEY_DISPLAY_DURATION: Duration = Duration::from_secs(2);
+
 #[derive(Clone)]
 pub struct App {
     pub app_title_name: String,
@@ -200,6 +203,8 @@ impl EframeApp for App {
         if self.auto_save && self.unsaved_changes {
             self.save_workspaces();
         }
+
+        self.render_hotkey_notification(ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -992,5 +997,26 @@ impl App {
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
         });
+    }
+
+    /// Render a transient overlay displaying the most recently activated hotkey.
+    fn render_hotkey_notification(&self, ctx: &egui::Context) {
+        let mut info = self.last_hotkey_info.lock().unwrap();
+        if let Some((ref sequence, timestamp)) = *info {
+            if timestamp.elapsed() <= HOTKEY_DISPLAY_DURATION {
+                egui::Area::new("hotkey_notification")
+                    .order(egui::Order::Foreground)
+                    .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
+                    .show(ctx, |ui| {
+                        egui::Frame::dark_canvas(ui.style())
+                            .rounding(egui::Rounding::same(4.0))
+                            .show(ui, |ui| {
+                                ui.label(sequence);
+                            });
+                    });
+            } else {
+                *info = None;
+            }
+        }
     }
 }
