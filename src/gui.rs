@@ -280,6 +280,21 @@ impl App {
                             show_message_box("Workspaces saved successfully!", "Save");
                             ui.close_menu();
                         }
+                        if ui.button("Save Workspaces As...").clicked() {
+                            let default_path = self
+                                .last_workspace_file
+                                .clone()
+                                .unwrap_or_else(|| "workspaces.json".to_string());
+                            if let Some(chosen) = rfd::FileDialog::new()
+                                .set_file_name(&default_path)
+                                .save_file()
+                                .map(|p| p.to_string_lossy().to_string())
+                            {
+                                self.save_workspaces_to_file(&chosen);
+                                show_message_box("Workspaces saved successfully!", "Save");
+                            }
+                            ui.close_menu();
+                        }
                         if ui.button("Load Workspaces...").clicked() {
                             let default_path = self
                                 .last_workspace_file
@@ -702,10 +717,27 @@ impl App {
     /// - Logs a message when the workspaces are successfully saved.
     /// - Logs an error message if file creation or writing fails.
     fn save_workspaces(&mut self) {
+        let default_path = self
+            .last_workspace_file
+            .clone()
+            .unwrap_or_else(|| "workspaces.json".to_string());
+        self.save_workspaces_to_file(&default_path);
+    }
+
+    /// Save workspaces to the specified path and persist the choice.
+    pub fn save_workspaces_to_file(&mut self, path: &str) {
         let workspaces = self.workspaces.lock().unwrap();
-        save_workspaces(&workspaces, "workspaces.json");
+        save_workspaces(&workspaces, path);
+        self.last_workspace_file = Some(path.to_string());
         self.unsaved_changes = false;
         info!("Workspaces saved successfully.");
+        save_settings(&Settings {
+            save_on_exit: self.save_on_exit,
+            auto_save: self.auto_save,
+            log_level: self.log_level.clone(),
+            last_layout_file: self.last_layout_file.clone(),
+            last_workspace_file: self.last_workspace_file.clone(),
+        });
     }
 
     /// Adds a new workspace to the list of workspaces.

@@ -104,6 +104,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
    - Right-click the workspace header to open the rename dialog.
    - Enter a new name and confirm by clicking "Ok."
 3. **Delete Workspace**: Click "Delete Workspace" to remove a workspace.
+4. **Save Workspaces As...**: Choose **File -> Workspace Management -> Save Workspaces As...** to pick a custom JSON file. The selected path is remembered for future saves.
 
 ### Window Management
 
@@ -169,7 +170,8 @@ Explorer or your editor without additional console output.
 
 ### Workspace Storage
 
-- Workspaces are saved in `workspaces.json`.
+- Workspaces are saved in `workspaces.json` by default.
+- Use **Save Workspaces As...** to choose another location; the last path is stored in `settings.json`.
 - The file uses a pretty-printed JSON format for easy manual edits.
 
 ---
