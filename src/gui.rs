@@ -820,6 +820,21 @@ impl App {
                         poll_interval_ms: self.poll_interval_ms,
                     });
                 }
+                ui.horizontal(|ui| {
+                    ui.label("Hotkey poll interval (ms):");
+                    let mut interval = self.poll_interval_ms as i32;
+                    if ui.add(egui::DragValue::new(&mut interval).clamp_range(10..=1000)).changed() {
+                        self.poll_interval_ms = interval.max(10) as u64;
+                        save_settings(&Settings {
+                            save_on_exit: self.save_on_exit,
+                            auto_save: self.auto_save,
+                            log_level: self.log_level.clone(),
+                            last_layout_file: self.last_layout_file.clone(),
+                            last_workspace_file: self.last_workspace_file.clone(),
+                            poll_interval_ms: self.poll_interval_ms,
+                        });
+                    }
+                });
                 let mut changed = false;
                 egui::ComboBox::from_label("Log Level")
                     .selected_text(&self.log_level)
