@@ -202,15 +202,31 @@ impl Workspace {
         for (i, window) in windows.into_iter().enumerate() {
             ui.horizontal(|ui| {
                 update_window_thumbnail(window, ui.ctx());
-                if let Some(tex) = &window.thumbnail {
-                    let size = tex.size();
-                    let mut vec = egui::vec2(size[0] as f32, size[1] as f32);
-                    let max = 64.0;
-                    let scale = (max / vec.x).min(max / vec.y).min(1.0);
-                    vec *= scale;
-                    ui.image(egui::load::SizedTexture::new(tex.id(), vec));
+                let title_resp = ui.label(&window.title);
+
+                let popup_id = egui::Id::new(format!("window_thumbnail_popup_{}", window.id));
+                if title_resp.hovered() && ui.input(|i| i.pointer.secondary_clicked()) && !ui.memory(|mem| mem.is_popup_open(popup_id)) {
+                    ui.memory_mut(|mem| mem.open_popup(popup_id));
                 }
-                ui.label(&window.title);
+
+                egui::popup::popup_below_widget(
+                    ui,
+                    popup_id,
+                    &title_resp,
+                    egui::PopupCloseBehavior::CloseOnClickOutside,
+                    |ui| {
+                        let scale_id = ui.make_persistent_id("thumb_scale");
+                        let mut scale = ui.memory(|m| m.data.get_temp::<f32>(scale_id)).unwrap_or(1.0);
+                        ui.add(egui::Slider::new(&mut scale, 0.1..=4.0).text("Scale"));
+                        ui.memory_mut(|m| m.data.insert_temp(scale_id, scale));
+                        if let Some(tex) = &window.thumbnail {
+                            let size = egui::vec2(tex.size()[0] as f32 * scale, tex.size()[1] as f32 * scale);
+                            ui.image(SizedTexture::new(tex.id(), size));
+                        } else {
+                            ui.label("No thumbnail available");
+                        }
+                    },
+                );
 
                 if i > 0 && ui.button("Move ⏶").clicked() {
                     move_up_index = Some(i);
