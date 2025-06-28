@@ -2,6 +2,20 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 
+/// Theme mode for the application's appearance.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeMode {
+    Dark,
+    Light,
+    Custom,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        ThemeMode::Dark
+    }
+}
+
 /// Persistent configuration options loaded from and saved to `settings.json`.
 ///
 /// These values control global behavior such as logging verbosity and whether
@@ -21,6 +35,15 @@ pub struct Settings {
     /// Optional path to the last workspace file used.
     #[serde(default)]
     pub last_workspace_file: Option<String>,
+    /// Theme mode for the GUI.
+    #[serde(default)]
+    pub theme: ThemeMode,
+    /// Custom background color in RGBA when `theme` is `Custom`.
+    #[serde(default)]
+    pub custom_bg: Option<[u8; 4]>,
+    /// Custom accent color in RGBA when `theme` is `Custom`.
+    #[serde(default)]
+    pub custom_accent: Option<[u8; 4]>,
 }
 
 impl Default for Settings {
@@ -32,6 +55,9 @@ impl Default for Settings {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            theme: ThemeMode::Dark,
+            custom_bg: None,
+            custom_accent: None,
         }
     }
 }
@@ -89,6 +115,9 @@ mod tests {
             log_level: "debug".to_string(),
             last_layout_file: Some("file.json".into()),
             last_workspace_file: Some("work.json".into()),
+            theme: ThemeMode::Custom,
+            custom_bg: Some([1, 2, 3, 4]),
+            custom_accent: Some([5, 6, 7, 8]),
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -98,6 +127,9 @@ mod tests {
         assert_eq!(loaded.log_level, "debug");
         assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
         assert_eq!(loaded.last_workspace_file.as_deref(), Some("work.json"));
+        assert_eq!(loaded.theme, ThemeMode::Custom);
+        assert_eq!(loaded.custom_bg, Some([1, 2, 3, 4]));
+        assert_eq!(loaded.custom_accent, Some([5, 6, 7, 8]));
     }
 
     #[test]
@@ -110,6 +142,9 @@ mod tests {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            theme: ThemeMode::Dark,
+            custom_bg: None,
+            custom_accent: None,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -119,5 +154,8 @@ mod tests {
         assert_eq!(loaded.log_level, "info");
         assert_eq!(loaded.last_layout_file, None);
         assert_eq!(loaded.last_workspace_file, None);
+        assert_eq!(loaded.theme, ThemeMode::Dark);
+        assert_eq!(loaded.custom_bg, None);
+        assert_eq!(loaded.custom_accent, None);
     }
 }

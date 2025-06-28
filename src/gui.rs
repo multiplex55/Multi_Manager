@@ -7,7 +7,7 @@ use crate::window_manager::{
     move_all_to_origin,
 };
 use crate::workspace::*;
-use crate::settings::{save_settings, Settings};
+use crate::settings::{save_settings, Settings, ThemeMode};
 use eframe::egui::{self, TopBottomPanel, menu};
 use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
@@ -39,6 +39,9 @@ pub struct App {
     pub log_level: String,
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
+    pub theme: ThemeMode,
+    pub custom_bg: Option<[u8; 4]>,
+    pub custom_accent: Option<[u8; 4]>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -212,6 +215,9 @@ impl EframeApp for App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            theme: self.theme,
+            custom_bg: self.custom_bg,
+            custom_accent: self.custom_accent,
         });
     }
 }
@@ -244,6 +250,9 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                theme: self.theme,
+                                custom_bg: self.custom_bg,
+                                custom_accent: self.custom_accent,
                             });
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
@@ -266,6 +275,9 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                theme: self.theme,
+                                custom_bg: self.custom_bg,
+                                custom_accent: self.custom_accent,
                             });
                             ui.close_menu();
                         }
@@ -737,6 +749,9 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            theme: self.theme,
+            custom_bg: self.custom_bg,
+            custom_accent: self.custom_accent,
         });
     }
 
@@ -833,6 +848,9 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
                         last_workspace_file: self.last_workspace_file.clone(),
+                        theme: self.theme,
+                        custom_bg: self.custom_bg,
+                        custom_accent: self.custom_accent,
                     });
                 }
                 let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
@@ -843,6 +861,9 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        theme: self.theme,
+                        custom_bg: self.custom_bg,
+                        custom_accent: self.custom_accent,
                     });
                 }
                 let mut changed = false;
@@ -862,6 +883,9 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        theme: self.theme,
+                        custom_bg: self.custom_bg,
+                        custom_accent: self.custom_accent,
                     });
                 }
                 let mut path = self.last_layout_file.clone().unwrap_or_default();
@@ -879,6 +903,9 @@ impl App {
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
                             last_workspace_file: self.last_workspace_file.clone(),
+                            theme: self.theme,
+                            custom_bg: self.custom_bg,
+                            custom_accent: self.custom_accent,
                         });
                     }
                 });
@@ -991,6 +1018,9 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            theme: self.theme,
+            custom_bg: self.custom_bg,
+            custom_accent: self.custom_accent,
         });
     }
 }
