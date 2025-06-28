@@ -42,6 +42,7 @@ pub struct App {
     pub theme: ThemeMode,
     pub custom_bg: Option<[u8; 4]>,
     pub custom_accent: Option<[u8; 4]>,
+    pub theme_applied: bool,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -174,6 +175,11 @@ impl EframeApp for App {
     /// - The `_frame` parameter can be used to control window-level properties (size, decorations, etc.), though in this
     ///   code it’s not currently used.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.theme_applied {
+            self.apply_theme(ctx);
+            self.theme_applied = true;
+        }
+
         let mut save_flag = false;
         let mut new_workspace: Option<Workspace> = None;
         let mut workspace_to_delete: Option<usize> = None;
@@ -922,6 +928,7 @@ impl App {
                         ui.selectable_value(&mut self.theme, ThemeMode::Custom, "Custom");
                     });
                 if old_theme != self.theme {
+                    self.apply_theme(ctx);
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
                         auto_save: self.auto_save,
@@ -946,6 +953,7 @@ impl App {
                         ui.label("Background color:");
                         if ui.color_edit_button_srgba(&mut bg).changed() {
                             self.custom_bg = Some([bg.r(), bg.g(), bg.b(), bg.a()]);
+                            self.apply_theme(ctx);
                             save_settings(&Settings {
                                 save_on_exit: self.save_on_exit,
                                 auto_save: self.auto_save,
@@ -962,6 +970,7 @@ impl App {
                         ui.label("Accent color:");
                         if ui.color_edit_button_srgba(&mut accent).changed() {
                             self.custom_accent = Some([accent.r(), accent.g(), accent.b(), accent.a()]);
+                            self.apply_theme(ctx);
                             save_settings(&Settings {
                                 save_on_exit: self.save_on_exit,
                                 auto_save: self.auto_save,
@@ -997,6 +1006,29 @@ impl App {
 
         if let Err(e) = Command::new("explorer").arg(&log_path).spawn() {
             show_error_box(&format!("Failed to open log folder: {}", e), "Error");
+        }
+    }
+
+    /// Apply the currently selected theme to the egui context.
+    fn apply_theme(&self, ctx: &egui::Context) {
+        match self.theme {
+            ThemeMode::Dark => ctx.set_visuals(egui::Visuals::dark()),
+            ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
+            ThemeMode::Custom => {
+                let mut visuals = egui::Visuals::dark();
+                if let Some(bg) = self.custom_bg {
+                    visuals.widgets.noninteractive.bg_fill =
+                        egui::Color32::from_rgba_premultiplied(bg[0], bg[1], bg[2], bg[3]);
+                }
+                if let Some(accent) = self.custom_accent {
+                    let color = egui::Color32::from_rgba_premultiplied(
+                        accent[0], accent[1], accent[2], accent[3],
+                    );
+                    visuals.selection.bg_fill = color;
+                    visuals.hyperlink_color = color;
+                }
+                ctx.set_visuals(visuals);
+            }
         }
     }
 

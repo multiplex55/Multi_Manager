@@ -166,6 +166,7 @@ fn main() {
         theme: settings.theme,
         custom_bg: settings.custom_bg,
         custom_accent: settings.custom_accent,
+        theme_applied: false,
     };
 
     // Launch GUI and set the taskbar icon after creating the window
