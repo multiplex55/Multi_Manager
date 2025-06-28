@@ -909,6 +909,72 @@ impl App {
                         });
                     }
                 });
+                let old_theme = self.theme;
+                egui::ComboBox::from_label("Theme")
+                    .selected_text(match self.theme {
+                        ThemeMode::Dark => "Dark",
+                        ThemeMode::Light => "Light",
+                        ThemeMode::Custom => "Custom",
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.theme, ThemeMode::Dark, "Dark");
+                        ui.selectable_value(&mut self.theme, ThemeMode::Light, "Light");
+                        ui.selectable_value(&mut self.theme, ThemeMode::Custom, "Custom");
+                    });
+                if old_theme != self.theme {
+                    save_settings(&Settings {
+                        save_on_exit: self.save_on_exit,
+                        auto_save: self.auto_save,
+                        log_level: self.log_level.clone(),
+                        last_layout_file: self.last_layout_file.clone(),
+                        last_workspace_file: self.last_workspace_file.clone(),
+                        theme: self.theme,
+                        custom_bg: self.custom_bg,
+                        custom_accent: self.custom_accent,
+                    });
+                }
+                if self.theme == ThemeMode::Custom {
+                    let mut bg = self
+                        .custom_bg
+                        .map(|c| egui::Color32::from_rgba_premultiplied(c[0], c[1], c[2], c[3]))
+                        .unwrap_or(egui::Color32::from_rgba_premultiplied(0, 0, 0, 255));
+                    let mut accent = self
+                        .custom_accent
+                        .map(|c| egui::Color32::from_rgba_premultiplied(c[0], c[1], c[2], c[3]))
+                        .unwrap_or(egui::Color32::from_rgba_premultiplied(0, 0, 0, 255));
+                    ui.horizontal(|ui| {
+                        ui.label("Background color:");
+                        if ui.color_edit_button_srgba(&mut bg).changed() {
+                            self.custom_bg = Some([bg.r(), bg.g(), bg.b(), bg.a()]);
+                            save_settings(&Settings {
+                                save_on_exit: self.save_on_exit,
+                                auto_save: self.auto_save,
+                                log_level: self.log_level.clone(),
+                                last_layout_file: self.last_layout_file.clone(),
+                                last_workspace_file: self.last_workspace_file.clone(),
+                                theme: self.theme,
+                                custom_bg: self.custom_bg,
+                                custom_accent: self.custom_accent,
+                            });
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Accent color:");
+                        if ui.color_edit_button_srgba(&mut accent).changed() {
+                            self.custom_accent = Some([accent.r(), accent.g(), accent.b(), accent.a()]);
+                            save_settings(&Settings {
+                                save_on_exit: self.save_on_exit,
+                                auto_save: self.auto_save,
+                                log_level: self.log_level.clone(),
+                                last_layout_file: self.last_layout_file.clone(),
+                                last_workspace_file: self.last_workspace_file.clone(),
+                                theme: self.theme,
+                                custom_bg: self.custom_bg,
+                                custom_accent: self.custom_accent,
+                            });
+                        }
+                    });
+                }
                 if ui.button("Close").clicked() {
                     self.show_settings = false;
                 }
