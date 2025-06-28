@@ -149,7 +149,7 @@ fn main() {
         app_title_name: "Multi Manager".to_string(),
         workspaces: Arc::new(Mutex::new(Vec::new())),
         last_hotkey_info: Arc::new(Mutex::new(None)), // Initialize to None
-        hotkey_promise: Arc::new(Mutex::new(None)),   // Initialize the promise
+        hotkey_rx: None,
         initial_validation_done: Arc::new(Mutex::new(false)), // Initialize flag to false
         registered_hotkeys: Arc::new(Mutex::new(HashMap::new())), // Initialize the map
         rename_dialog: None,

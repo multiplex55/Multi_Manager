@@ -1,10 +1,10 @@
 use crate::utils::*;
 use crate::window_manager::{
-    check_hotkeys,
     send_all_windows_home,
     capture_all_desktops,
     restore_all_desktops,
     move_all_to_origin,
+    toggle_workspace_windows,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -13,19 +13,18 @@ use eframe::egui::ViewportBuilder;
 use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
 use log::{info, warn};
-use poll_promise::Promise;
 use rfd::FileDialog;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
+use crossbeam_channel::{unbounded, Receiver};
 
 #[derive(Clone)]
 pub struct App {
     pub app_title_name: String,
     pub workspaces: Arc<Mutex<Vec<Workspace>>>,
     pub last_hotkey_info: Arc<Mutex<Option<(String, Instant)>>>,
-    pub hotkey_promise: Arc<Mutex<Option<Promise<()>>>>,
+    pub hotkey_rx: Option<Receiver<i32>>,
     pub initial_validation_done: Arc<Mutex<bool>>,
     pub registered_hotkeys: Arc<Mutex<HashMap<String, usize>>>,
     pub rename_dialog: Option<(usize, String)>,
@@ -53,7 +52,7 @@ pub struct WorkspaceControlContext<'a> {
 /// This function is responsible for:
 /// - Loading existing workspace configurations from a JSON file.
 /// - Validating and registering hotkeys for the workspaces.
-/// - Spawning a background thread to monitor hotkey presses.
+/// - Setting up a channel to receive hotkey events.
 /// - Initializing and running the GUI using the `eframe` framework.
 ///
 /// # Example
@@ -62,7 +61,7 @@ pub struct WorkspaceControlContext<'a> {
 ///     app_title_name: "Multi Manager".to_string(),
 ///     workspaces: Arc::new(Mutex::new(Vec::new())),
 ///     last_hotkey_info: Arc::new(Mutex::new(None)),
-///     hotkey_promise: Arc::new(Mutex::new(None)),
+///     hotkey_rx: None,
 ///     initial_validation_done: Arc::new(Mutex::new(false)),
 ///     registered_hotkeys: Arc::new(Mutex::new(HashMap::new())),
 /// };
@@ -71,7 +70,6 @@ pub struct WorkspaceControlContext<'a> {
 ///
 /// # Dependencies
 /// - `eframe` for GUI rendering.
-/// - `poll_promise` for asynchronous hotkey monitoring.
 /// - `image` for loading the application icon.
 ///
 /// # Parameters
@@ -79,20 +77,20 @@ pub struct WorkspaceControlContext<'a> {
 ///
 /// # Behavior
 /// - Loads workspaces from the `workspaces.json` file.
-/// - Starts a background thread for checking hotkey presses.
+/// - Sets up a message hook for WM_HOTKEY events.
 /// - Configures the GUI with a custom application icon and launches it.
 ///
 /// # Side Effects
 /// - Reads from the `workspaces.json` file to load saved configurations.
 /// - Registers hotkeys and logs any failures during the process.
-/// - Spawns a background thread that continuously monitors hotkeys.
+/// - Processes hotkey events delivered through the channel.
 ///
 /// # Error Conditions
 /// - Logs and exits if the GUI fails to initialize or run.
 /// - Logs errors if the `workspaces.json` file is missing or contains invalid data.
 ///
 /// # Notes
-/// - The background thread runs indefinitely, polling for hotkey presses every 100 milliseconds.
+/// - Hotkey events are delivered by Windows via `WM_HOTKEY` messages.
 /// - Ensure that the `workspaces.json` file exists and is writable to preserve state.
 pub fn run_gui(app: App) {
     {
@@ -104,14 +102,12 @@ pub fn run_gui(app: App) {
         *workspaces = load_workspaces(&path, &app);
     }
 
+    let mut app = app;
     app.validate_initial_hotkeys();
 
-    let app_for_promise = app.clone();
-    let hotkey_promise = Promise::spawn_thread("Hotkey Checker", move || loop {
-        check_hotkeys(&app_for_promise);
-        thread::sleep(Duration::from_millis(100));
-    });
-    *app.hotkey_promise.lock().unwrap() = Some(hotkey_promise);
+    let (tx, rx) = unbounded::<i32>();
+    app.hotkey_rx = Some(rx);
+    let tx_clone = tx.clone();
 
     let icon_data = include_bytes!("../resources/app_icon.ico");
     let image = image::load_from_memory(icon_data)
@@ -126,6 +122,21 @@ pub fn run_gui(app: App) {
             width,
             height,
         }),
+        #[cfg(target_os = "windows")]
+        event_loop_builder: Some(Box::new(move |builder| {
+            use winit::platform::windows::EventLoopBuilderExtWindows;
+            use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_HOTKEY};
+            let tx_inner = tx_clone.clone();
+            builder.with_msg_hook(move |msg| unsafe {
+                let msg = msg as *const MSG;
+                if (*msg).message == WM_HOTKEY {
+                    let _ = tx_inner.send((*msg).wParam as i32);
+                }
+                false
+            });
+        })),
+        #[cfg(not(target_os = "windows"))]
+        event_loop_builder: None,
         ..Default::default()
     };
 
@@ -192,6 +203,8 @@ impl EframeApp for App {
         if let Some(index) = workspace_to_delete {
             self.delete_workspace(index);
         }
+
+        self.process_hotkey_events();
 
         if self.show_settings {
             self.render_settings_window(ctx);
@@ -992,5 +1005,33 @@ impl App {
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
         });
+    }
+
+    /// Process any pending WM_HOTKEY events received from the operating system.
+    fn process_hotkey_events(&mut self) {
+        if let Some(ref rx) = self.hotkey_rx {
+            let events: Vec<i32> = rx.try_iter().collect();
+            for id in events {
+                self.handle_hotkey_event(id);
+            }
+        }
+    }
+
+    /// Toggle the workspace associated with the given hotkey id.
+    fn handle_hotkey_event(&mut self, id: i32) {
+        let mut workspaces = self.workspaces.lock().unwrap();
+        for workspace in workspaces.iter_mut() {
+            if workspace.disabled {
+                continue;
+            }
+            if let Some(hotkey) = workspace.hotkey.as_ref().cloned() {
+                if hotkey.id == Some(id) {
+                    toggle_workspace_windows(workspace);
+                    let mut info = self.last_hotkey_info.lock().unwrap();
+                    *info = Some((hotkey.key_sequence.clone(), Instant::now()));
+                    break;
+                }
+            }
+        }
     }
 }
