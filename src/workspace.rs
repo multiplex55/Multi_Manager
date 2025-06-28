@@ -324,11 +324,12 @@ impl Workspace {
         // Capture active window button
         if ui.button("Capture Active Window").clicked() {
             if let Some(("Enter", hwnd, title)) = listen_for_keys_with_dialog_and_window() {
+                let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
                 self.windows.push(Window {
                     id: hwnd.0 as usize,
                     title,
-                    home: (0, 0, 800, 600),
-                    target: (0, 0, 800, 600),
+                    home: rect,
+                    target: rect,
                     valid: true,
                 });
                 changed = true;
