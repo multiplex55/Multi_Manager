@@ -867,7 +867,7 @@ pub fn listen_for_keys_with_dialog() -> Option<&'static str> {
 /// // In a loop or thread, we might do:
 /// loop {
 ///     check_hotkeys(&app);
-///     std::thread::sleep(std::time::Duration::from_millis(100));
+///     std::thread::sleep(std::time::Duration::from_millis(poll_interval));
 /// }
 /// ```
 ///

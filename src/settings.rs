@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 
+fn default_poll_interval_ms() -> u64 {
+    100
+}
 /// Persistent configuration options loaded from and saved to `settings.json`.
 ///
 /// These values control global behavior such as logging verbosity and whether
@@ -21,6 +24,9 @@ pub struct Settings {
     /// Optional path to the last workspace file used.
     #[serde(default)]
     pub last_workspace_file: Option<String>,
+    /// Interval in milliseconds for polling hotkeys.
+    #[serde(default = "default_poll_interval_ms")]
+    pub poll_interval_ms: u64,
 }
 
 impl Default for Settings {
@@ -32,6 +38,7 @@ impl Default for Settings {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            poll_interval_ms: 100,
         }
     }
 }
@@ -89,6 +96,7 @@ mod tests {
             log_level: "debug".to_string(),
             last_layout_file: Some("file.json".into()),
             last_workspace_file: Some("work.json".into()),
+            poll_interval_ms: 200,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -98,6 +106,7 @@ mod tests {
         assert_eq!(loaded.log_level, "debug");
         assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
         assert_eq!(loaded.last_workspace_file.as_deref(), Some("work.json"));
+        assert_eq!(loaded.poll_interval_ms, 200);
     }
 
     #[test]
@@ -110,6 +119,7 @@ mod tests {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            poll_interval_ms: 150,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -119,5 +129,6 @@ mod tests {
         assert_eq!(loaded.log_level, "info");
         assert_eq!(loaded.last_layout_file, None);
         assert_eq!(loaded.last_workspace_file, None);
+        assert_eq!(loaded.poll_interval_ms, 150);
     }
 }

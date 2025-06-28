@@ -39,6 +39,7 @@ pub struct App {
     pub log_level: String,
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
+    pub poll_interval_ms: u64,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -92,7 +93,7 @@ pub struct WorkspaceControlContext<'a> {
 /// - Logs errors if the `workspaces.json` file is missing or contains invalid data.
 ///
 /// # Notes
-/// - The background thread runs indefinitely, polling for hotkey presses every 100 milliseconds.
+/// - The background thread runs indefinitely, polling for hotkey presses at the interval specified in the settings.
 /// - Ensure that the `workspaces.json` file exists and is writable to preserve state.
 pub fn run_gui(app: App) {
     {
@@ -106,10 +107,11 @@ pub fn run_gui(app: App) {
 
     app.validate_initial_hotkeys();
 
+    let poll_interval = app.poll_interval_ms;
     let app_for_promise = app.clone();
     let hotkey_promise = Promise::spawn_thread("Hotkey Checker", move || loop {
         check_hotkeys(&app_for_promise);
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(poll_interval));
     });
     *app.hotkey_promise.lock().unwrap() = Some(hotkey_promise);
 
@@ -212,6 +214,7 @@ impl EframeApp for App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            poll_interval_ms: self.poll_interval_ms,
         });
     }
 }
@@ -244,6 +247,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                poll_interval_ms: self.poll_interval_ms,
                             });
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
@@ -266,6 +270,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                poll_interval_ms: self.poll_interval_ms,
                             });
                             ui.close_menu();
                         }
@@ -801,6 +806,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
                         last_workspace_file: self.last_workspace_file.clone(),
+                        poll_interval_ms: self.poll_interval_ms,
                     });
                 }
                 let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
@@ -811,6 +817,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        poll_interval_ms: self.poll_interval_ms,
                     });
                 }
                 let mut changed = false;
@@ -830,6 +837,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        poll_interval_ms: self.poll_interval_ms,
                     });
                 }
                 let mut path = self.last_layout_file.clone().unwrap_or_default();
@@ -847,6 +855,7 @@ impl App {
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
                             last_workspace_file: self.last_workspace_file.clone(),
+                            poll_interval_ms: self.poll_interval_ms,
                         });
                     }
                 });
@@ -959,6 +968,7 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            poll_interval_ms: self.poll_interval_ms,
         });
     }
 }
