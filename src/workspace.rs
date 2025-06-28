@@ -44,6 +44,7 @@ impl Workspace {
     /// # Returns
     /// - `Ok(())` if the hotkey is valid and successfully set.
     /// - `Err` with an error message if the hotkey is invalid or fails to register.
+    ///   In this case, any previously registered hotkey remains active.
     ///
     /// # Example
     /// ```
@@ -55,21 +56,31 @@ impl Workspace {
     pub fn set_hotkey(&mut self, app: &App, hotkey: &str) -> Result<(), String> {
         match Hotkey::new(hotkey) {
             Ok(mut new_hotkey) => {
-                if let Some(ref old_hotkey) = self.hotkey {
-                    old_hotkey.unregister(app);
+                // If the new sequence is identical to the current one, nothing to do
+                if self
+                    .hotkey
+                    .as_ref()
+                    .is_some_and(|hk| hk.key_sequence == hotkey)
+                {
+                    return Ok(());
                 }
 
-                // Pick a unique id for the new hotkey
+                // Pick a unique id for the new hotkey while keeping the old registered
                 let id = {
                     let registered = app.registered_hotkeys.lock().unwrap();
                     registered.values().max().copied().unwrap_or(0) as i32 + 1
                 };
 
-                // Try to register immediately so the map stays accurate
+                // Attempt to register the new hotkey first
                 if new_hotkey.register(app, id) {
+                    // If successful, unregister the old hotkey and store the new one
+                    if let Some(ref old_hotkey) = self.hotkey {
+                        old_hotkey.unregister(app);
+                    }
                     self.hotkey = Some(new_hotkey);
                     Ok(())
                 } else {
+                    // Registration failed; keep the old hotkey registered
                     Err(format!("Failed to register hotkey: {}", hotkey))
                 }
             }
