@@ -486,7 +486,7 @@ pub fn restore_all_desktops(_file: &str) {
 /// # Notes
 /// - If `get_window_position` fails or returns an error, this function returns `false`.
 /// - Primarily used internally (e.g., in `are_all_windows_at_home`).
-fn is_window_at_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> bool {
+pub fn is_window_at_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> bool {
     if let Ok((wx, wy, ww, wh)) = get_window_position(hwnd) {
         wx == x && wy == y && ww == w && wh == h
     } else {
