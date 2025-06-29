@@ -39,6 +39,7 @@ pub struct App {
     pub log_level: String,
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
+    pub developer_debugging: bool,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -212,6 +213,7 @@ impl EframeApp for App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            developer_debugging: self.developer_debugging,
         });
     }
 }
@@ -244,6 +246,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                developer_debugging: self.developer_debugging,
                             });
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
@@ -266,6 +269,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                developer_debugging: self.developer_debugging,
                             });
                             ui.close_menu();
                         }
@@ -737,6 +741,7 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            developer_debugging: self.developer_debugging,
         });
     }
 
@@ -833,6 +838,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
                         last_workspace_file: self.last_workspace_file.clone(),
+                        developer_debugging: self.developer_debugging,
                     });
                 }
                 let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
@@ -843,6 +849,18 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        developer_debugging: self.developer_debugging,
+                    });
+                }
+                let dev_response = ui.checkbox(&mut self.developer_debugging, "Developer Debugging");
+                if dev_response.changed() {
+                    save_settings(&Settings {
+                        save_on_exit: self.save_on_exit,
+                        auto_save: self.auto_save,
+                        log_level: self.log_level.clone(),
+                        last_layout_file: self.last_layout_file.clone(),
+                        last_workspace_file: self.last_workspace_file.clone(),
+                        developer_debugging: self.developer_debugging,
                     });
                 }
                 let mut changed = false;
@@ -862,6 +880,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        developer_debugging: self.developer_debugging,
                     });
                 }
                 let mut path = self.last_layout_file.clone().unwrap_or_default();
@@ -879,6 +898,7 @@ impl App {
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
                             last_workspace_file: self.last_workspace_file.clone(),
+                            developer_debugging: self.developer_debugging,
                         });
                     }
                 });
@@ -991,6 +1011,7 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            developer_debugging: self.developer_debugging,
         });
     }
 }

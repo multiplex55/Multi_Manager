@@ -163,6 +163,7 @@ fn main() {
         log_level: settings.log_level.clone(),
         last_layout_file: settings.last_layout_file.clone(),
         last_workspace_file: settings.last_workspace_file.clone(),
+        developer_debugging: settings.developer_debugging,
     };
 
     // Launch GUI and set the taskbar icon after creating the window

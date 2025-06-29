@@ -4,6 +4,7 @@ use crate::window_manager::get_window_position;
 use crate::window_manager::listen_for_keys_with_dialog_and_window;
 use crate::window_manager::move_window;
 use crate::window_manager::move_window_to_origin;
+use crate::window_manager::is_window_at_position;
 use crate::window_manager::*;
 use eframe::egui;
 use log::{error, info, warn};
@@ -234,10 +235,23 @@ impl Workspace {
                 let exists =
                     unsafe { IsWindow(HWND(window.id as *mut std::ffi::c_void)).as_bool() };
                 if exists {
+                    // Determine current location if debugging is enabled
+                    let debug_info = if app.developer_debugging {
+                        let hwnd = HWND(window.id as *mut std::ffi::c_void);
+                        if is_window_at_position(hwnd, window.home.0, window.home.1, window.home.2, window.home.3) {
+                            " home"
+                        } else if is_window_at_position(hwnd, window.target.0, window.target.1, window.target.2, window.target.3) {
+                            " target"
+                        } else {
+                            " neither"
+                        }
+                    } else {
+                        ""
+                    };
                     // Define the label and capture its response
                     let label_response = ui.colored_label(
                         egui::Color32::GREEN,
-                        format!("HWND: {:?}", window.id),
+                        format!("HWND: {:?}{}", window.id, debug_info),
                     );
                 
                     // Create a unique ID for the popup menu
