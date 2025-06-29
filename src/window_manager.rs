@@ -429,6 +429,49 @@ unsafe extern "system" fn enum_origin_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
+#[cfg(target_os = "windows")]
+/// Move a specific window to the center of the primary monitor.
+///
+/// This function validates the provided window handle, restores the window if
+/// it is minimized, retrieves the current monitor size and the window's
+/// dimensions, then repositions the window so it is centered on the screen.
+pub fn move_window_to_origin(hwnd: HWND) {
+    unsafe {
+        if !IsWindow(hwnd).as_bool() {
+            warn!("Invalid window handle: {:?}", hwnd);
+            return;
+        }
+
+        if IsIconic(hwnd).as_bool() {
+            if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
+                warn!("Failed to restore minimized window {:?}", hwnd);
+            } else {
+                info!("Restored minimized window {:?}", hwnd);
+            }
+        }
+    }
+
+    let screen_width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    let screen_height = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+
+    if let Ok((_, _, w, h)) = get_window_position(hwnd) {
+        let x = (screen_width - w) / 2;
+        let y = (screen_height - h) / 2;
+        match move_window(hwnd, x, y, w, h) {
+            Ok(_) => info!("Moved window {:?} to center ({}, {})", hwnd, x, y),
+            Err(e) => warn!("Failed to move window {:?}: {}", hwnd, e),
+        }
+    } else {
+        warn!("Failed to get position for window {:?}", hwnd);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+/// Stub for non-Windows platforms.
+pub fn move_window_to_origin(_hwnd: HWND) {
+    warn!("move_window_to_origin is only available on Windows");
+}
+
 #[cfg(not(target_os = "windows"))]
 /// Stub implementation for non-Windows platforms. Calling this function on a
 /// non-Windows build logs a warning and performs no action.
