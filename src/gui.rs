@@ -1004,7 +1004,7 @@ impl App {
         let mut info = self.last_hotkey_info.lock().unwrap();
         if let Some((ref sequence, timestamp)) = *info {
             if timestamp.elapsed() <= HOTKEY_DISPLAY_DURATION {
-                egui::Area::new("hotkey_notification")
+                egui::Area::new(egui::Id::new("hotkey_notification"))
                     .order(egui::Order::Foreground)
                     .anchor(egui::Align2::RIGHT_BOTTOM, [-10.0, -10.0])
                     .show(ctx, |ui| {
