@@ -1,7 +1,7 @@
 use crate::gui::App;
 use crate::workspace::Workspace;
 use crate::utils::{show_confirmation_box, show_message_box};
-use log::{info, warn};
+use log::{info, warn, debug};
 use std::time::Instant;
 use windows::core::{Result, PCWSTR};
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
@@ -144,7 +144,7 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
         workspace.current_index = (workspace.current_index + 1) % len;
     } else {
         let all_at_home = are_all_windows_at_home(workspace);
-        info!("DEBUG all_at_home {}", all_at_home);
+        debug!("all_at_home={}", all_at_home);
 
         for window in &workspace.windows {
             let hwnd = HWND(window.id as *mut std::ffi::c_void);
@@ -781,6 +781,9 @@ pub fn get_active_window() -> Option<(HWND, String)> {
 /// # Behavior
 /// - Invokes the Win32 API call [`SetWindowPos`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos)
 ///   to move the specified window to the new location and size.
+/// - If the window is minimized, [`set_restore_position`](fn.set_restore_position.html)
+///   updates its stored coordinates, then the window is restored and positioned
+///   with `SetWindowPos`.
 /// - Maintains the window’s Z-order by using `SWP_NOZORDER`.
 /// - Returns `Ok(())` if the operation succeeds, or a Windows error wrapped in `Err` on failure.
 ///
@@ -806,6 +809,7 @@ pub fn move_window(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Result<()> {
         if IsIconic(hwnd).as_bool() {
             set_restore_position(hwnd, x, y, w, h)?;
             ShowWindow(hwnd, SW_RESTORE);
+            SetWindowPos(hwnd, HWND_TOP, x, y, w, h, SWP_NOZORDER)?;
         } else {
             SetWindowPos(hwnd, HWND_TOP, x, y, w, h, SWP_NOZORDER)?;
         }
