@@ -558,9 +558,15 @@ pub fn set_restore_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Resul
     unsafe {
         let mut placement = WINDOWPLACEMENT::default();
         placement.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
-        GetWindowPlacement(hwnd, &mut placement).ok()?;
-        placement.rcNormalPosition = RECT { left: x, top: y, right: x + w, bottom: y + h };
-        SetWindowPlacement(hwnd, &placement).ok()
+        GetWindowPlacement(hwnd, &mut placement)?;
+        placement.rcNormalPosition = RECT {
+            left: x,
+            top: y,
+            right: x + w,
+            bottom: y + h,
+        };
+        SetWindowPlacement(hwnd, &placement)?;
+        Ok(())
     }
 }
 
