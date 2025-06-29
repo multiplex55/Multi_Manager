@@ -3,6 +3,7 @@ use crate::hotkey::Hotkey;
 use crate::window_manager::get_window_position;
 use crate::window_manager::listen_for_keys_with_dialog_and_window;
 use crate::window_manager::move_window;
+use crate::window_manager::move_window_to_origin;
 use crate::window_manager::*;
 use eframe::egui;
 use log::{error, info, warn};
@@ -275,6 +276,14 @@ impl Workspace {
                                 }
 
                                 // Explicitly close the popup after the action
+                                ui.memory_mut(|mem| mem.close_popup());
+                                changed = true;
+                            }
+
+                            // Add the "Force Move to Origin" button
+                            if ui.button("Force Move to Origin").clicked() {
+                                info!("Force Move to Origin triggered for HWND: {:?}", window.id);
+                                move_window_to_origin(HWND(window.id as *mut _));
                                 ui.memory_mut(|mem| mem.close_popup());
                                 changed = true;
                             }
