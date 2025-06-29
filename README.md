@@ -16,6 +16,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
   - Capture active windows and associate them with specific workspaces.
   - Save "Home" and "Target" window positions.
   - Move windows between "Home" and "Target" positions.
+  - Right-click a valid window and choose **Force Move to Origin** to center it on the main desktop.
 - **Hotkey Support**: Assign global hotkeys to workspaces for quick activation.
 - **Hotkey Display**: The workspace title shows the assigned hotkey (e.g., `Workspace 1 - F13`) and updates automatically when you rename the workspace or change its hotkey.
 - **Validation System**:
@@ -119,6 +120,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
    - Only valid windows (as determined by the `IsWindow` API) are displayed and operated on.
    - Invalid windows are marked with a red indicator and ignored during toggles or moves.
 
+5. **Force Move to Origin**: Right-click a valid window to center it on the main desktop.
 ### Hotkey Management
 
 1. **Assign Hotkeys**:
