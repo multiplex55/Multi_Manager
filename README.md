@@ -126,7 +126,7 @@ https://github.com/user-attachments/assets/452cc353-c795-428a-a3e7-dca2cd9c3ce0
 1. **Assign Hotkeys**:
    - Enter a valid hotkey combination in the input field.
    - Click "Validate Hotkey" to confirm.
-2. **Activate Workspace**: Use the assigned hotkey to activate the workspace and toggle window positions.
+2. **Activate Workspace**: Use the assigned hotkey to activate the workspace and toggle window positions. Minimized windows are restored at their saved coordinates.
 
 ### Desktop Management
 

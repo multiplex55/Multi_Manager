@@ -347,7 +347,7 @@ impl App {
     ///
     /// # Parameters
     /// - `ui: &mut egui::Ui`: The UI context for rendering the header.
-    /// - `save_flag: &mut bool`: Reserved for future use.
+    /// - `_save_flag: &mut bool`: Reserved for future use.
     /// - `new_workspace: &mut Option<Workspace>`: A mutable reference to store a newly created workspace.
     ///
     /// # Side Effects
@@ -358,7 +358,7 @@ impl App {
     fn render_header(
         &mut self,
         ui: &mut egui::Ui,
-        save_flag: &mut bool,
+        _save_flag: &mut bool,
         new_workspace: &mut Option<Workspace>,
     ) {
         ui.heading(&self.app_title_name);
