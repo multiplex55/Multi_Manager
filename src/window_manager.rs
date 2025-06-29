@@ -68,7 +68,8 @@ pub fn is_hotkey_pressed(key_sequence: &str) -> bool {
 /// - Calls `are_all_windows_at_home(workspace)` to determine if every window is at its home position.
 ///   - If **all** are at home, the function moves each valid window to its `target`.
 ///   - Otherwise, it attempts to move each valid window **back to its home** position.
-/// - Restores minimized windows (via `ShowWindow(..., SW_RESTORE)`) before moving them.
+/// - Restores minimized windows using `move_window`, which internally
+///   updates the window's restore coordinates and calls `ShowWindow`.
 /// - Activates each window (via `SetForegroundWindow`) after movement completes.
 ///
 /// # Side Effects
@@ -120,13 +121,6 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
                     warn!("Skipping invalid window '{}'.", window.title);
                     continue;
                 }
-                if IsIconic(hwnd).as_bool() {
-                    if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
-                        warn!("Failed to restore minimized window '{}'.", window.title);
-                    } else {
-                        info!("Restored minimized window '{}'.", window.title);
-                    }
-                }
             }
 
             let position = if i == target_idx { window.target } else { window.home };
@@ -160,13 +154,6 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
                     warn!("Skipping invalid window '{}'.", window.title);
                     continue;
                 }
-                if IsIconic(hwnd).as_bool() {
-                    if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
-                        warn!("Failed to restore minimized window '{}'.", window.title);
-                    } else {
-                        info!("Restored minimized window '{}'.", window.title);
-                    }
-                }
             }
 
             let target_position = if all_at_home { window.target } else { window.home };
@@ -197,7 +184,7 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
 /// Moves all valid windows in a `Workspace` to their defined **home** positions.
 ///
 /// # Behavior
-/// - Restores minimized windows before moving them.
+/// - Restores minimized windows automatically when moved.
 /// - Uses [`move_window`](fn.move_window.html) to reposition each window.
 /// - Attempts to activate each window after it has been moved.
 ///
@@ -216,13 +203,6 @@ pub fn send_workspace_windows_home(workspace: &Workspace) {
                 continue;
             }
 
-            if IsIconic(hwnd).as_bool() {
-                if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
-                    warn!("Failed to restore minimized window '{}'.", window.title);
-                } else {
-                    info!("Restored minimized window '{}'.", window.title);
-                }
-            }
         }
 
         if let Err(e) = move_window(hwnd, window.home.0, window.home.1, window.home.2, window.home.3) {
@@ -327,7 +307,6 @@ pub fn restore_all_desktops(file: &str) {
             let hwnd = HWND(info.hwnd as *mut _);
             unsafe {
                 if IsWindow(hwnd).as_bool() {
-                    if IsIconic(hwnd).as_bool() { let _ = ShowWindow(hwnd, SW_RESTORE); }
                     move_window(hwnd, info.rect.0, info.rect.1, info.rect.2, info.rect.3).ok();
                 }
             }
@@ -442,13 +421,6 @@ pub fn move_window_to_origin(hwnd: HWND) {
             return;
         }
 
-        if IsIconic(hwnd).as_bool() {
-            if !ShowWindow(hwnd, SW_RESTORE).as_bool() {
-                warn!("Failed to restore minimized window {:?}", hwnd);
-            } else {
-                info!("Restored minimized window {:?}", hwnd);
-            }
-        }
     }
 
     let screen_width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
@@ -577,6 +549,18 @@ pub fn get_window_position(hwnd: HWND) -> Result<(i32, i32, i32, i32)> {
         } else {
             Err(windows::core::Error::from_win32())
         }
+    }
+}
+
+/// Sets the restore rectangle for a minimized window so it will
+/// reappear at the specified coordinates when restored.
+pub fn set_restore_position(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Result<()> {
+    unsafe {
+        let mut placement = WINDOWPLACEMENT::default();
+        placement.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+        GetWindowPlacement(hwnd, &mut placement).ok()?;
+        placement.rcNormalPosition = RECT { left: x, top: y, right: x + w, bottom: y + h };
+        SetWindowPlacement(hwnd, &placement).ok()
     }
 }
 
@@ -813,7 +797,12 @@ pub fn get_active_window() -> Option<(HWND, String)> {
 /// - Only valid on Windows, where `SetWindowPos` is available.
 pub fn move_window(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) -> Result<()> {
     unsafe {
-        SetWindowPos(hwnd, HWND_TOP, x, y, w, h, SWP_NOZORDER)?;
+        if IsIconic(hwnd).as_bool() {
+            set_restore_position(hwnd, x, y, w, h)?;
+            ShowWindow(hwnd, SW_RESTORE);
+        } else {
+            SetWindowPos(hwnd, HWND_TOP, x, y, w, h, SWP_NOZORDER)?;
+        }
         info!(
             "Moved window (HWND: {:?}) to position ({}, {}, {}, {}).",
             hwnd.0, x, y, w, h
