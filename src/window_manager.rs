@@ -979,3 +979,13 @@ pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, S
     }
     None
 }
+
+/// Check if the Enter key is currently pressed using `GetAsyncKeyState`.
+pub fn is_enter_pressed() -> bool {
+    unsafe { GetAsyncKeyState(VK_RETURN.0 as i32) < 0 }
+}
+
+/// Check if the Escape key is currently pressed using `GetAsyncKeyState`.
+pub fn is_escape_pressed() -> bool {
+    unsafe { GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 }
+}

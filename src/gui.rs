@@ -5,6 +5,9 @@ use crate::window_manager::{
     capture_all_desktops,
     restore_all_desktops,
     move_all_to_origin,
+    get_active_window,
+    is_enter_pressed,
+    is_escape_pressed,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -40,6 +43,8 @@ pub struct App {
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
     pub developer_debugging: bool,
+    pub recapture_queue: Vec<(usize, usize)>,
+    pub recapture_active: bool,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -184,6 +189,10 @@ impl EframeApp for App {
             self.render_workspace_list(ui, &mut workspace_to_delete);
         });
 
+        if self.recapture_active {
+            self.process_recapture_all(ctx);
+        }
+
         if save_flag {
             self.save_workspaces();
         }
@@ -316,6 +325,10 @@ impl App {
                     });
                     if ui.button("Open Log Folder").clicked() {
                         self.open_log_folder();
+                        ui.close_menu();
+                    }
+                    if ui.button("Recapture All").clicked() {
+                        self.start_recapture_all();
                         ui.close_menu();
                     }
                     if ui.button("Settings").clicked() {
@@ -927,42 +940,80 @@ impl App {
         }
     }
 
+    /// Begin recapturing all windows across every workspace.
+    fn start_recapture_all(&mut self) {
+        self.recapture_queue.clear();
+        let workspaces = self.workspaces.lock().unwrap();
+        for (wi, ws) in workspaces.iter().enumerate() {
+            for (wj, _w) in ws.windows.iter().enumerate() {
+                self.recapture_queue.push((wi, wj));
+            }
+        }
+        self.recapture_active = !self.recapture_queue.is_empty();
+    }
+
+    /// Handle the recapture-all workflow, displaying a floating panel and
+    /// updating window handles when the user confirms.
+    fn process_recapture_all(&mut self, ctx: &egui::Context) {
+        if !self.recapture_active {
+            return;
+        }
+
+        if let Some(&(ws_idx, win_idx)) = self.recapture_queue.first() {
+            let (ws_name, win_title) = {
+                let workspaces = self.workspaces.lock().unwrap();
+                let ws_name = workspaces
+                    .get(ws_idx)
+                    .map(|w| w.name.clone())
+                    .unwrap_or_default();
+                let win_title = workspaces
+                    .get(ws_idx)
+                    .and_then(|w| w.windows.get(win_idx))
+                    .map(|w| w.title.clone())
+                    .unwrap_or_default();
+                (ws_name, win_title)
+            };
+
+            egui::Window::new("Recapture All")
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 20.0])
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "Recapturing workspace '{}' window '{}'",
+                        ws_name, win_title
+                    ));
+                    ui.label("Focus the desired window and press Enter to capture or Esc to skip.");
+                });
+
+            if is_enter_pressed() {
+                if let Some((hwnd, title)) = get_active_window() {
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    if let Some(ws) = workspaces.get_mut(ws_idx) {
+                        if let Some(win) = ws.windows.get_mut(win_idx) {
+                            win.id = hwnd.0 as usize;
+                            win.title = title;
+                            win.valid = true;
+                            self.unsaved_changes = true;
+                        }
+                    }
+                }
+                self.recapture_queue.remove(0);
+            } else if is_escape_pressed() {
+                self.recapture_queue.remove(0);
+            }
+
+            if self.recapture_queue.is_empty() {
+                self.recapture_active = false;
+            }
+
+            ctx.request_repaint();
+        } else {
+            self.recapture_active = false;
+        }
+    }
+
     /// Validates and registers hotkeys for all workspaces during initialization.
-    ///
-    /// This function ensures that all valid hotkeys associated with workspaces are registered
-    /// at the start of the application. It prevents re-validation by using a flag stored
-    /// in `initial_validation_done`.
-    ///
-    /// # Behavior
-    /// - Checks if initial validation has already been done using the `initial_validation_done` flag.
-    /// - Iterates through all workspaces and attempts to register their hotkeys.
-    /// - Logs a warning if a hotkey fails to register.
-    /// - Marks the validation as complete after processing all workspaces.
-    ///
-    /// # Dependencies
-    /// - Uses the `register_hotkey` function from `window_manager.rs`.
-    ///
-    /// # Parameters
-    /// - None.
-    ///
-    /// # Example
-    /// ```rust
-    /// app.validate_initial_hotkeys();
-    /// ```
-    ///
-    /// # Side Effects
-    /// - Registers all valid hotkeys for the existing workspaces.
-    /// - Updates the `initial_validation_done` flag to `true`.
-    ///
-    /// # Notes
-    /// - This function is called during the initial setup of the GUI in `run_gui`.
-    /// - If a hotkey is invalid or fails to register, it logs a warning but continues processing other workspaces.
-    ///
-    /// # Logs
-    /// - Logs success or failure messages for each hotkey registration.
-    ///
-    /// # Error Conditions
-    /// - None. Errors during hotkey registration are logged but not propagated.
     fn validate_initial_hotkeys(&self) {
         let mut initial_validation_done = self.initial_validation_done.lock().unwrap();
         if !*initial_validation_done {
@@ -985,9 +1036,6 @@ impl App {
     }
 
     /// Load workspaces from the specified file, replacing current ones.
-    ///
-    /// This unregisters existing hotkeys, loads the new workspace list and
-    /// stores the provided path in `last_workspace_file` and the settings file.
     pub fn load_workspaces_from_file(&mut self, path: &str) {
         {
             let mut workspaces = self.workspaces.lock().unwrap();
