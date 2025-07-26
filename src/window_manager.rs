@@ -942,6 +942,20 @@ pub fn check_hotkeys(app: &App) {
             toggle_workspace_windows(workspace);
         }
     }
+
+    drop(workspaces);
+
+    if app.recapture_active {
+        unsafe {
+            if GetAsyncKeyState(VK_RETURN.0 as i32) < 0 {
+                let mut key = app.recapture_input.lock().unwrap();
+                *key = Some("Enter".to_string());
+            } else if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 {
+                let mut key = app.recapture_input.lock().unwrap();
+                *key = Some("Escape".to_string());
+            }
+        }
+    }
 }
 
 pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, String)> {
