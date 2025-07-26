@@ -164,6 +164,7 @@ fn main() {
         last_layout_file: settings.last_layout_file.clone(),
         last_workspace_file: settings.last_workspace_file.clone(),
         developer_debugging: settings.developer_debugging,
+        recapture_process: None,
     };
 
     // Launch GUI and set the taskbar icon after creating the window

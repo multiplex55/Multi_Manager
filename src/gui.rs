@@ -5,6 +5,7 @@ use crate::window_manager::{
     capture_all_desktops,
     restore_all_desktops,
     move_all_to_origin,
+    get_active_window,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -15,7 +16,7 @@ use eframe::{self, App as EframeApp};
 use log::{info, warn};
 use poll_promise::Promise;
 use rfd::FileDialog;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -40,6 +41,7 @@ pub struct App {
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
     pub developer_debugging: bool,
+    pub recapture_process: Option<RecaptureProcess>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -48,6 +50,12 @@ pub struct WorkspaceControlContext<'a> {
     pub move_down_index: &'a mut Option<usize>,
     pub workspaces_len: usize,
     pub index: usize,
+}
+
+#[derive(Clone)]
+pub struct RecaptureProcess {
+    pub queue: VecDeque<(usize, usize)>,
+    pub current: Option<(usize, usize)>,
 }
 
 //
@@ -198,6 +206,9 @@ impl EframeApp for App {
             self.render_settings_window(ctx);
         }
 
+        // Process any ongoing recapture sequence
+        self.handle_recapture_all(ctx);
+
         if self.auto_save && self.unsaved_changes {
             self.save_workspaces();
         }
@@ -316,6 +327,10 @@ impl App {
                     });
                     if ui.button("Open Log Folder").clicked() {
                         self.open_log_folder();
+                        ui.close_menu();
+                    }
+                    if ui.button("Recapture All").clicked() {
+                        self.start_recapture_all();
                         ui.close_menu();
                     }
                     if ui.button("Settings").clicked() {
@@ -924,6 +939,88 @@ impl App {
 
         if let Err(e) = Command::new("explorer").arg(&log_path).spawn() {
             show_error_box(&format!("Failed to open log folder: {}", e), "Error");
+        }
+    }
+
+    /// Begin a recapture process for every window in every workspace.
+    fn start_recapture_all(&mut self) {
+        let workspaces = self.workspaces.lock().unwrap();
+        let mut queue = VecDeque::new();
+        for (wi, ws) in workspaces.iter().enumerate() {
+            for (i, _) in ws.windows.iter().enumerate() {
+                queue.push_back((wi, i));
+            }
+        }
+        drop(workspaces);
+        if !queue.is_empty() {
+            self.recapture_process = Some(RecaptureProcess { queue, current: None });
+        }
+    }
+
+    /// Handle the recapture overlay and key events.
+    fn handle_recapture_all(&mut self, ctx: &egui::Context) {
+        if let Some(proc) = self.recapture_process.as_mut() {
+            if proc.current.is_none() {
+                proc.current = proc.queue.pop_front();
+            }
+
+            if let Some((ws_idx, win_idx)) = proc.current {
+                let (ws_name, win_title) = {
+                    let workspaces = self.workspaces.lock().unwrap();
+                    if let Some(ws) = workspaces.get(ws_idx) {
+                        let name = ws.name.clone();
+                        let title = ws.windows.get(win_idx).map(|w| w.title.clone()).unwrap_or_default();
+                        (name, title)
+                    } else {
+                        (String::new(), String::new())
+                    }
+                };
+
+                egui::Window::new("Recapture All")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_TOP, [0.0, 10.0])
+                    .show(ctx, |ui| {
+                        ui.label(format!("Workspace: {}", ws_name));
+                        ui.label(format!("Window: {}", win_title));
+                        ui.label("Focus window and press Enter (Esc to skip)");
+                    });
+
+                let mut confirm = false;
+                let mut skip = false;
+                ctx.input(|i| {
+                    for ev in &i.events {
+                        if let egui::Event::Key { key, pressed: true, .. } = ev {
+                            if *key == egui::Key::Enter {
+                                confirm = true;
+                            } else if *key == egui::Key::Escape {
+                                skip = true;
+                            }
+                        }
+                    }
+                });
+
+                if confirm {
+                    if let Some((hwnd, title)) = get_active_window() {
+                        let mut workspaces = self.workspaces.lock().unwrap();
+                        if let Some(ws) = workspaces.get_mut(ws_idx) {
+                            if let Some(win) = ws.windows.get_mut(win_idx) {
+                                win.id = hwnd.0 as usize;
+                                win.title = title;
+                                win.valid = true;
+                            }
+                        }
+                        self.unsaved_changes = true;
+                    }
+                    proc.current = None;
+                } else if skip {
+                    proc.current = None;
+                }
+
+                ctx.request_repaint();
+            } else {
+                self.recapture_process = None;
+            }
         }
     }
 
