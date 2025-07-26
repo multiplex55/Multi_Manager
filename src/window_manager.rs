@@ -980,24 +980,34 @@ pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, S
     None
 }
 
-/// Poll for Enter or Escape key presses globally without showing a dialog.
-///
-/// Returns `Some(true)` if Enter was pressed, `Some(false)` if Escape was
-/// pressed, or `None` if neither key was pressed since the last call.
+/// Action returned by [`poll_recapture_keys`].
+pub enum RecaptureAction {
+    /// The user confirmed with Enter.
+    Confirm,
+    /// The user skipped with the `S` key.
+    Skip,
+    /// The user cancelled with Escape.
+    Cancel,
+}
+
+/// Poll for Enter, `S`, or Escape key presses globally without showing a dialog.
 #[cfg(target_os = "windows")]
-pub fn poll_recapture_keys() -> Option<bool> {
+pub fn poll_recapture_keys() -> Option<RecaptureAction> {
     unsafe {
         if GetAsyncKeyState(VK_RETURN.0 as i32) & 1 != 0 {
-            return Some(true);
+            return Some(RecaptureAction::Confirm);
+        }
+        if GetAsyncKeyState('S' as i32) & 1 != 0 {
+            return Some(RecaptureAction::Skip);
         }
         if GetAsyncKeyState(VK_ESCAPE.0 as i32) & 1 != 0 {
-            return Some(false);
+            return Some(RecaptureAction::Cancel);
         }
     }
     None
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn poll_recapture_keys() -> Option<bool> {
+pub fn poll_recapture_keys() -> Option<RecaptureAction> {
     None
 }
