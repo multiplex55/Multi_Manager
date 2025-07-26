@@ -776,6 +776,19 @@ pub fn get_active_window() -> Option<(HWND, String)> {
     }
 }
 
+/// Find a window by its exact title.
+pub fn find_window_by_title(title: &str) -> Option<HWND> {
+    unsafe {
+        let wide: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
+        let hwnd = FindWindowW(None, PCWSTR(wide.as_ptr()));
+        if hwnd.0.is_null() {
+            None
+        } else {
+            Some(hwnd)
+        }
+    }
+}
+
 /// Repositions and resizes a window identified by `hwnd` to the coordinates `(x, y)` with dimensions `(w, h)`.
 ///
 /// # Behavior

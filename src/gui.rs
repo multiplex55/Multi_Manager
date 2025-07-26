@@ -40,6 +40,8 @@ pub struct App {
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
     pub developer_debugging: bool,
+    pub recapture_status: Arc<Mutex<Option<String>>>,
+    pub recapture_promise: Arc<Mutex<Option<Promise<()>>>>,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -198,6 +200,8 @@ impl EframeApp for App {
             self.render_settings_window(ctx);
         }
 
+        self.render_recapture_status(ctx);
+
         if self.auto_save && self.unsaved_changes {
             self.save_workspaces();
         }
@@ -316,6 +320,10 @@ impl App {
                     });
                     if ui.button("Open Log Folder").clicked() {
                         self.open_log_folder();
+                        ui.close_menu();
+                    }
+                    if ui.button("Recapture All").clicked() {
+                        self.recapture_all();
                         ui.close_menu();
                     }
                     if ui.button("Settings").clicked() {
@@ -912,6 +920,49 @@ impl App {
     fn send_all_home(&self) {
         let mut workspaces = self.workspaces.lock().unwrap();
         send_all_windows_home(&mut workspaces);
+    }
+
+    fn recapture_all(&mut self) {
+        let workspaces = Arc::clone(&self.workspaces);
+        let status = Arc::clone(&self.recapture_status);
+        let promise = Promise::spawn_thread("Recapture All", move || {
+            let mut workspaces = workspaces.lock().unwrap();
+            for workspace in workspaces.iter_mut() {
+                for window in workspace.windows.iter_mut() {
+                    {
+                        let mut s = status.lock().unwrap();
+                        *s = Some(format!(
+                            "{} - {}",
+                            workspace.name,
+                            window.title
+                        ));
+                    }
+                    if let Some(hwnd) = crate::window_manager::find_window_by_title(&window.title) {
+                        window.id = hwnd.0 as usize;
+                        window.valid = true;
+                    } else {
+                        window.valid = false;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+            }
+            *status.lock().unwrap() = None;
+        });
+        *self.recapture_promise.lock().unwrap() = Some(promise);
+        self.unsaved_changes = true;
+    }
+
+    fn render_recapture_status(&self, ctx: &egui::Context) {
+        if let Some(text) = self.recapture_status.lock().unwrap().clone() {
+            egui::Window::new("Recapturing")
+                .title_bar(false)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 20.0])
+                .show(ctx, |ui| {
+                    ui.label(format!("Recapturing: {}", text));
+                });
+        }
     }
 
     /// Open the folder containing `multi_manager.log` using Windows Explorer.
