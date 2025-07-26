@@ -979,3 +979,24 @@ pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, S
     }
     None
 }
+
+/// Waits for the user to press **Enter** or **Escape** without displaying a dialog box.
+///
+/// This is used by the "Recapture All" feature to allow the user to
+/// confirm or cancel capturing the currently active window while providing
+/// feedback through the GUI instead of a modal message box.
+pub fn wait_for_enter_or_escape() -> Option<&'static str> {
+    loop {
+        unsafe {
+            if GetAsyncKeyState(VK_RETURN.0 as i32) < 0 {
+                info!("Enter key detected.");
+                return Some("Enter");
+            }
+            if GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 {
+                info!("Escape key detected.");
+                return Some("Esc");
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}

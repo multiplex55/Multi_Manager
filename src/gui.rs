@@ -5,6 +5,8 @@ use crate::window_manager::{
     capture_all_desktops,
     restore_all_desktops,
     move_all_to_origin,
+    get_active_window,
+    wait_for_enter_or_escape,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -40,6 +42,13 @@ pub struct App {
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
     pub developer_debugging: bool,
+    pub recapture_progress: Arc<Mutex<Option<RecaptureProgress>>>,
+}
+
+#[derive(Clone)]
+pub struct RecaptureProgress {
+    pub workspace: String,
+    pub window: String,
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -198,6 +207,20 @@ impl EframeApp for App {
             self.render_settings_window(ctx);
         }
 
+        if let Some(progress) = self.recapture_progress.lock().unwrap().clone() {
+            egui::Window::new("Recapture All")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 10.0])
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "Recapturing workspace '{}' window '{}'",
+                        progress.workspace, progress.window
+                    ));
+                    ui.label("Press Enter to confirm or Esc to skip");
+                });
+        }
+
         if self.auto_save && self.unsaved_changes {
             self.save_workspaces();
         }
@@ -316,6 +339,10 @@ impl App {
                     });
                     if ui.button("Open Log Folder").clicked() {
                         self.open_log_folder();
+                        ui.close_menu();
+                    }
+                    if ui.button("Recapture All").clicked() {
+                        self.start_recapture_all();
                         ui.close_menu();
                     }
                     if ui.button("Settings").clicked() {
@@ -925,6 +952,64 @@ impl App {
         if let Err(e) = Command::new("explorer").arg(&log_path).spawn() {
             show_error_box(&format!("Failed to open log folder: {}", e), "Error");
         }
+    }
+
+    /// Iterate through every workspace and recapture each window in sequence.
+    ///
+    /// A floating panel indicates which workspace and window is currently being
+    /// processed. The user may focus the desired window and press **Enter** to
+    /// recapture it or **Esc** to skip.
+    fn start_recapture_all(&self) {
+        if self.recapture_progress.lock().unwrap().is_some() {
+            return;
+        }
+
+        let app_clone = self.clone();
+        *self.recapture_progress.lock().unwrap() = Some(RecaptureProgress {
+            workspace: String::new(),
+            window: String::new(),
+        });
+
+        thread::spawn(move || {
+            let mut order = Vec::new();
+            {
+                let workspaces = app_clone.workspaces.lock().unwrap();
+                for (wi, ws) in workspaces.iter().enumerate() {
+                    for (wj, _w) in ws.windows.iter().enumerate() {
+                        order.push((wi, wj));
+                    }
+                }
+            }
+
+            for (wi, wj) in order {
+                let (ws_name, win_title) = {
+                    let workspaces = app_clone.workspaces.lock().unwrap();
+                    let ws_name = workspaces[wi].name.clone();
+                    let win_title = workspaces[wi].windows[wj].title.clone();
+                    (ws_name, win_title)
+                };
+
+                {
+                    let mut progress = app_clone.recapture_progress.lock().unwrap();
+                    *progress = Some(RecaptureProgress { workspace: ws_name.clone(), window: win_title.clone() });
+                }
+
+                if let Some("Enter") = wait_for_enter_or_escape() {
+                    if let Some((hwnd, title)) = get_active_window() {
+                        let mut workspaces = app_clone.workspaces.lock().unwrap();
+                        if let Some(ws) = workspaces.get_mut(wi) {
+                            if let Some(win) = ws.windows.get_mut(wj) {
+                                win.id = hwnd.0 as usize;
+                                win.title = title;
+                                win.valid = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            *app_clone.recapture_progress.lock().unwrap() = None;
+        });
     }
 
     /// Validates and registers hotkeys for all workspaces during initialization.
