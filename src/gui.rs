@@ -7,6 +7,7 @@ use crate::window_manager::{
     move_all_to_origin,
     get_active_window,
     poll_recapture_keys,
+    RecaptureAction,
 };
 use crate::workspace::*;
 use crate::settings::{save_settings, Settings};
@@ -984,33 +985,47 @@ impl App {
                         "Recapturing workspace '{}' window '{}'",
                         ws_name, win_title
                     ));
-                    ui.label("Focus the desired window and press Enter to capture or Esc to skip.");
+                    ui.label("Focus the desired window and press Enter to capture, 'S' to skip, or Esc to cancel.");
                 });
 
-            if let Some(enter) = poll_recapture_keys() {
-                if enter {
-                    if let Some((hwnd, title)) = get_active_window() {
-                        let mut workspaces = self.workspaces.lock().unwrap();
-                        if let Some(ws) = workspaces.get_mut(ws_idx) {
-                            if let Some(win) = ws.windows.get_mut(win_idx) {
-                                win.id = hwnd.0 as usize;
-                                win.title = title;
-                                win.valid = true;
-                                self.unsaved_changes = true;
+            if let Some(action) = poll_recapture_keys() {
+                match action {
+                    RecaptureAction::Confirm => {
+                        if let Some((hwnd, title)) = get_active_window() {
+                            let mut workspaces = self.workspaces.lock().unwrap();
+                            if let Some(ws) = workspaces.get_mut(ws_idx) {
+                                if let Some(win) = ws.windows.get_mut(win_idx) {
+                                    win.id = hwnd.0 as usize;
+                                    win.title = title;
+                                    win.valid = true;
+                                    self.unsaved_changes = true;
+                                }
                             }
                         }
+                        self.recapture_queue.remove(0);
+                    }
+                    RecaptureAction::Skip => {
+                        self.recapture_queue.remove(0);
+                    }
+                    RecaptureAction::Cancel => {
+                        self.recapture_queue.clear();
+                        self.recapture_active = false;
                     }
                 }
-                self.recapture_queue.remove(0);
             }
 
             if self.recapture_queue.is_empty() {
                 self.recapture_active = false;
             }
 
+            if !self.recapture_active {
+                let _ = poll_recapture_keys();
+            }
+
             ctx.request_repaint();
         } else {
             self.recapture_active = false;
+            let _ = poll_recapture_keys();
         }
     }
 
