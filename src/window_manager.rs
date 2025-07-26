@@ -979,3 +979,25 @@ pub fn listen_for_keys_with_dialog_and_window() -> Option<(&'static str, HWND, S
     }
     None
 }
+
+/// Poll for Enter or Escape key presses globally without showing a dialog.
+///
+/// Returns `Some(true)` if Enter was pressed, `Some(false)` if Escape was
+/// pressed, or `None` if neither key was pressed since the last call.
+#[cfg(target_os = "windows")]
+pub fn poll_recapture_keys() -> Option<bool> {
+    unsafe {
+        if GetAsyncKeyState(VK_RETURN.0 as i32) & 1 != 0 {
+            return Some(true);
+        }
+        if GetAsyncKeyState(VK_ESCAPE.0 as i32) & 1 != 0 {
+            return Some(false);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn poll_recapture_keys() -> Option<bool> {
+    None
+}
