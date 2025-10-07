@@ -222,7 +222,12 @@ pub fn send_workspace_windows_home(workspace: &Workspace) {
 }
 
 /// Iterates over every workspace and sends each of their windows to the `home` position.
-pub fn send_all_windows_home(workspaces: &mut [Workspace]) {
+pub fn send_all_windows_home(workspaces: &[Workspace]) {
+    if workspaces.is_empty() {
+        debug!("send_all_windows_home called with no workspaces; skipping move request.");
+        return;
+    }
+
     for workspace in workspaces.iter() {
         send_workspace_windows_home(workspace);
     }
