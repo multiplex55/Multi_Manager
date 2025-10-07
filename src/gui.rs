@@ -19,9 +19,12 @@ use log::{info, warn};
 use poll_promise::Promise;
 use rfd::FileDialog;
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 
 #[derive(Clone)]
 pub struct App {
@@ -923,8 +926,40 @@ impl App {
 
     /// Sends every window in all workspaces back to its configured home position.
     fn send_all_home(&self) {
-        let mut workspaces = self.workspaces.lock().unwrap();
-        send_all_windows_home(&mut workspaces);
+        let (actionable_workspaces, actionable_count) = {
+            let workspaces = self.workspaces.lock().unwrap();
+            let mut actionable_count = 0usize;
+            let mut collected = Vec::new();
+
+            for workspace in workspaces.iter() {
+                let mut workspace_snapshot = workspace.clone();
+                workspace_snapshot.windows.retain(|window| {
+                    let hwnd = HWND(window.id as *mut c_void);
+                    let is_valid = unsafe { IsWindow(hwnd).as_bool() };
+                    if is_valid {
+                        actionable_count += 1;
+                    }
+                    is_valid
+                });
+
+                if !workspace_snapshot.windows.is_empty() {
+                    collected.push(workspace_snapshot);
+                }
+            }
+
+            (collected, actionable_count)
+        };
+
+        if actionable_count == 0 {
+            info!("Send-all-home requested, but no valid windows were found.");
+            show_message_box(
+                "No captured windows are currently available to send home.",
+                "Send Windows Home",
+            );
+            return;
+        }
+
+        send_all_windows_home(&actionable_workspaces);
     }
 
     /// Open the folder containing `multi_manager.log` using Windows Explorer.
