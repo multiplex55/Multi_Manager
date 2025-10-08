@@ -144,25 +144,22 @@ pub fn apply_window_bindings(
     let mut stats = BindingApplicationStats::default();
 
     for binding in bindings {
-        let workspace_idx = binding.workspace_index;
-        let maybe_index_match = workspaces.get_mut(workspace_idx);
+        let workspace_idx = workspaces
+            .get(binding.workspace_index)
+            .and_then(|ws| {
+                if ws.name == binding.workspace_name {
+                    Some(binding.workspace_index)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                workspaces
+                    .iter()
+                    .position(|ws| ws.name == binding.workspace_name)
+            });
 
-        let workspace = if let Some(ws) = maybe_index_match {
-            if ws.name == binding.workspace_name {
-                Some(ws)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-        .or_else(|| {
-            workspaces
-                .iter_mut()
-                .find(|ws| ws.name == binding.workspace_name)
-        });
-
-        let Some(workspace) = workspace else {
+        let Some(workspace_idx) = workspace_idx else {
             stats.unmatched += binding.windows.len();
             warn!(
                 "No matching workspace found for saved bindings '{}' (index {}).",
@@ -170,6 +167,8 @@ pub fn apply_window_bindings(
             );
             continue;
         };
+
+        let workspace = &mut workspaces[workspace_idx];
 
         for window_binding in &binding.windows {
             let mut target_index = None;
