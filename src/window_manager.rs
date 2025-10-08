@@ -1,7 +1,7 @@
 use crate::gui::App;
-use crate::workspace::Workspace;
 use crate::utils::{show_confirmation_box, show_message_box};
-use log::{info, warn, debug};
+use crate::workspace::Workspace;
+use log::{debug, info, warn};
 use std::time::Instant;
 use windows::core::{Result, PCWSTR};
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
@@ -123,12 +123,19 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
                 }
             }
 
-            let position = if i == target_idx { window.target } else { window.home };
+            let position = if i == target_idx {
+                window.target
+            } else {
+                window.home
+            };
 
             if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
                 warn!("Failed to move window '{}': {}", window.title, e);
             } else {
-                info!("Moved window '{}' to position: {:?}", window.title, position);
+                info!(
+                    "Moved window '{}' to position: {:?}",
+                    window.title, position
+                );
             }
 
             if i == target_idx {
@@ -156,7 +163,11 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
                 }
             }
 
-            let target_position = if all_at_home { window.target } else { window.home };
+            let target_position = if all_at_home {
+                window.target
+            } else {
+                window.home
+            };
 
             if let Err(e) = move_window(
                 hwnd,
@@ -167,7 +178,10 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
             ) {
                 warn!("Failed to move window '{}': {}", window.title, e);
             } else {
-                info!("Moved window '{}' to position: {:?}", window.title, target_position);
+                info!(
+                    "Moved window '{}' to position: {:?}",
+                    window.title, target_position
+                );
             }
 
             unsafe {
@@ -202,13 +216,21 @@ pub fn send_workspace_windows_home(workspace: &Workspace) {
                 );
                 continue;
             }
-
         }
 
-        if let Err(e) = move_window(hwnd, window.home.0, window.home.1, window.home.2, window.home.3) {
+        if let Err(e) = move_window(
+            hwnd,
+            window.home.0,
+            window.home.1,
+            window.home.2,
+            window.home.3,
+        ) {
             warn!("Failed to move window '{}': {}", window.title, e);
         } else {
-            info!("Moved window '{}' to home position: {:?}", window.title, window.home);
+            info!(
+                "Moved window '{}' to home position: {:?}",
+                window.title, window.home
+            );
         }
 
         unsafe {
@@ -235,16 +257,19 @@ pub fn send_all_windows_home(workspaces: &[Workspace]) {
 
 use crate::desktop_window_info::DesktopWindowInfo;
 use crate::virtual_desktop;
+use serde_json;
 use std::fs::File;
 use std::io::Write;
-use serde_json;
 
 /// Capture window positions for all desktops and store them as JSON.
 #[cfg(target_os = "windows")]
 pub fn capture_all_desktops(file: &str) {
     let mut infos: Vec<DesktopWindowInfo> = Vec::new();
     unsafe {
-        let _ = EnumWindows(Some(enum_capture_proc), LPARAM(&mut infos as *mut _ as isize));
+        let _ = EnumWindows(
+            Some(enum_capture_proc),
+            LPARAM(&mut infos as *mut _ as isize),
+        );
     }
     if let Ok(json) = serde_json::to_string_pretty(&infos) {
         if let Err(e) = File::create(file).and_then(|mut f| f.write_all(json.as_bytes())) {
@@ -425,7 +450,6 @@ pub fn move_window_to_origin(hwnd: HWND) {
             warn!("Invalid window handle: {:?}", hwnd);
             return;
         }
-
     }
 
     let screen_width = unsafe { GetSystemMetrics(SM_CXSCREEN) };

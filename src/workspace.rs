@@ -1,16 +1,17 @@
 use crate::gui::App;
 use crate::hotkey::Hotkey;
 use crate::window_manager::get_window_position;
+use crate::window_manager::is_window_at_position;
 use crate::window_manager::listen_for_keys_with_dialog_and_window;
 use crate::window_manager::move_window;
 use crate::window_manager::move_window_to_origin;
-use crate::window_manager::is_window_at_position;
 use crate::window_manager::*;
 use eframe::egui;
 use log::{error, info, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::ffi::c_void;
 use std::fs::File;
 use std::io::{Read, Write};
 use windows::Win32::Foundation::HWND;
@@ -253,16 +254,16 @@ impl Workspace {
                         egui::Color32::GREEN,
                         format!("HWND: {:?}{}", window.id, debug_info),
                     );
-                
+
                     // Create a unique ID for the popup menu
                     let popup_id = egui::Id::new(format!("hwnd_context_menu_workspace_{}_{}", i,window.id));
 
-                
+
                     // Handle right-click to toggle popup visibility
                     if label_response.hovered() && ui.input(|i| i.pointer.secondary_clicked()) && !ui.memory(|mem| mem.is_popup_open(popup_id)) {
                         ui.memory_mut(|mem| mem.open_popup(popup_id));
                         }
-                
+
                     // Render the popup menu if it's open
                     egui::popup::popup_below_widget(
                         ui,
@@ -271,7 +272,7 @@ impl Workspace {
                         egui::PopupCloseBehavior::CloseOnClickOutside, // Auto-close on outside click
                         |ui| {
                             ui.label("Options:");
-                
+
                             // Add the "Force Recapture" button
                             if ui.button("Force Recapture").clicked() {
                                 info!("Force Recapture triggered for HWND: {:?}", window.id);
@@ -303,7 +304,7 @@ impl Workspace {
                             }
                         },
                     );
-                    
+
         } else {
                 ui.colored_label(egui::Color32::RED, format!("HWND: {:?}", window.id));
                 if ui.button("Recapture").clicked() {
@@ -460,22 +461,27 @@ impl Workspace {
     /// - This function should be called whenever the state of a workspace changes (e.g., hotkey or windows are modified).
     /// - If the workspace is disabled, validation is skipped and the workspace is marked invalid.
     pub fn validate_workspace(&mut self) {
+        let mut any_valid_window = false;
+        for window in self.windows.iter_mut() {
+            let hwnd = HWND(window.id as *mut c_void);
+            let is_valid = unsafe { IsWindow(hwnd).as_bool() };
+            window.valid = is_valid;
+            if is_valid {
+                any_valid_window = true;
+            }
+        }
+
         if self.disabled {
             self.valid = false;
             return;
         }
 
-        self.valid = {
-            let hotkey_valid = self
-                .hotkey
-                .as_ref()
-                .is_some_and(|hotkey| is_valid_key_combo(&hotkey.key_sequence));
-            let any_valid_window = self.windows.iter().any(|window| unsafe {
-                IsWindow(HWND(window.id as *mut std::ffi::c_void)).as_bool()
-            });
+        let hotkey_valid = self
+            .hotkey
+            .as_ref()
+            .is_some_and(|hotkey| is_valid_key_combo(&hotkey.key_sequence));
 
-            hotkey_valid && any_valid_window
-        };
+        self.valid = hotkey_valid && any_valid_window;
     }
 }
 /// Presents egui UI elements for configuring **one** `Window`’s positioning data:
@@ -510,10 +516,30 @@ pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window, changed: &
     // Home position controls
     ui.horizontal(|ui| {
         ui.label("Home:");
-        if ui.add(egui::DragValue::new(&mut window.home.0).prefix("x: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.home.1).prefix("y: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.home.2).prefix("w: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.home.3).prefix("h: ")).changed() { *changed = true; }
+        if ui
+            .add(egui::DragValue::new(&mut window.home.0).prefix("x: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.home.1).prefix("y: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.home.2).prefix("w: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.home.3).prefix("h: "))
+            .changed()
+        {
+            *changed = true;
+        }
         if ui.button("Capture Home").clicked() {
             if let Ok((x, y, w, h)) = get_window_position(HWND(window.id as *mut _)) {
                 window.home = (x, y, w, h);
@@ -536,10 +562,30 @@ pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window, changed: &
     // Target position controls
     ui.horizontal(|ui| {
         ui.label("Target:");
-        if ui.add(egui::DragValue::new(&mut window.target.0).prefix("x: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.target.1).prefix("y: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.target.2).prefix("w: ")).changed() { *changed = true; }
-        if ui.add(egui::DragValue::new(&mut window.target.3).prefix("h: ")).changed() { *changed = true; }
+        if ui
+            .add(egui::DragValue::new(&mut window.target.0).prefix("x: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.target.1).prefix("y: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.target.2).prefix("w: "))
+            .changed()
+        {
+            *changed = true;
+        }
+        if ui
+            .add(egui::DragValue::new(&mut window.target.3).prefix("h: "))
+            .changed()
+        {
+            *changed = true;
+        }
         if ui.button("Capture Target").clicked() {
             if let Ok((x, y, w, h)) = get_window_position(HWND(window.id as *mut _)) {
                 window.target = (x, y, w, h);

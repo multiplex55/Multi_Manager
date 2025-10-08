@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::HWND;
-#[cfg(target_os = "windows")]
 use windows::core::Result;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::HWND;
 /// Represents a virtual desktop. Only a minimal stub implementation is
 /// provided as full virtual desktop manipulation is outside the scope of this
 /// project.
@@ -62,10 +62,18 @@ impl Desktop {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_current_desktop() -> Result<Desktop> { Ok(Desktop { index: 0 }) }
+pub fn get_current_desktop() -> Result<Desktop> {
+    Ok(Desktop { index: 0 })
+}
 #[cfg(not(target_os = "windows"))]
-pub fn get_desktops() -> Result<Vec<Desktop>> { Ok(vec![Desktop { index: 0 }]) }
+pub fn get_desktops() -> Result<Vec<Desktop>> {
+    Ok(vec![Desktop { index: 0 }])
+}
 #[cfg(not(target_os = "windows"))]
-pub fn switch_desktop(_: &Desktop) -> Result<()> { Ok(()) }
+pub fn switch_desktop(_: &Desktop) -> Result<()> {
+    Ok(())
+}
 #[cfg(not(target_os = "windows"))]
-pub fn get_desktop_by_window(_: HWND) -> Result<Desktop> { Ok(Desktop { index: 0 }) }
+pub fn get_desktop_by_window(_: HWND) -> Result<Desktop> {
+    Ok(Desktop { index: 0 })
+}

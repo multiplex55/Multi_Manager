@@ -1,31 +1,28 @@
 #![windows_subsystem = "windows"]
 
+mod desktop_window_info;
 mod gui;
 mod hotkey;
+mod settings;
 mod utils;
+mod virtual_desktop;
+mod window_bindings;
 mod window_manager;
 mod workspace;
-mod settings;
-mod virtual_desktop;
-mod desktop_window_info;
 
-use log::info;
-use clap::{ArgAction, Parser};
 use crate::settings::load_settings;
-use crate::window_manager::{
-    capture_all_desktops,
-    restore_all_desktops,
-    move_all_to_origin,
-};
-use std::path::PathBuf;
-use std::process::Command;
+use crate::window_manager::{capture_all_desktops, move_all_to_origin, restore_all_desktops};
+use clap::{ArgAction, Parser};
+use log::info;
 use std::collections::HashMap;
 use std::env;
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 #[cfg(windows)]
 fn ensure_console() {
-    use windows::Win32::System::Console::{AttachConsole, AllocConsole, ATTACH_PARENT_PROCESS};
+    use windows::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
     unsafe {
         if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
             let _ = AllocConsole();
@@ -163,6 +160,7 @@ fn main() {
         log_level: settings.log_level.clone(),
         last_layout_file: settings.last_layout_file.clone(),
         last_workspace_file: settings.last_workspace_file.clone(),
+        last_bindings_file: settings.last_bindings_file.clone(),
         developer_debugging: settings.developer_debugging,
         recapture_queue: Vec::new(),
         recapture_active: false,
@@ -215,8 +213,8 @@ fn cli_save_workspaces(path: &str) {
 }
 
 fn cli_load_workspaces(path: &str) {
-    use std::fs;
     use crate::workspace::Workspace;
+    use std::fs;
 
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
