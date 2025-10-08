@@ -1,21 +1,19 @@
+use crate::settings::{save_settings, Settings};
 use crate::utils::*;
+use crate::window_bindings::{
+    apply_window_bindings, load_window_bindings, save_window_bindings, BindingApplicationStats,
+    WindowBindingError,
+};
 use crate::window_manager::{
-    check_hotkeys,
-    send_all_windows_home,
-    capture_all_desktops,
-    restore_all_desktops,
-    move_all_to_origin,
-    get_active_window,
-    poll_recapture_keys,
-    RecaptureAction,
+    capture_all_desktops, check_hotkeys, get_active_window, move_all_to_origin,
+    poll_recapture_keys, restore_all_desktops, send_all_windows_home, RecaptureAction,
 };
 use crate::workspace::*;
-use crate::settings::{save_settings, Settings};
-use eframe::egui::{self, TopBottomPanel, menu};
 use eframe::egui::ViewportBuilder;
+use eframe::egui::{self, menu, TopBottomPanel};
 use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
-use log::{info, warn};
+use log::{debug, info, warn};
 use poll_promise::Promise;
 use rfd::FileDialog;
 use std::collections::HashMap;
@@ -45,6 +43,7 @@ pub struct App {
     pub log_level: String,
     pub last_layout_file: Option<String>,
     pub last_workspace_file: Option<String>,
+    pub last_bindings_file: Option<String>,
     pub developer_debugging: bool,
     pub recapture_queue: Vec<(usize, usize)>,
     pub recapture_active: bool,
@@ -103,7 +102,7 @@ pub struct WorkspaceControlContext<'a> {
 /// # Notes
 /// - The background thread runs indefinitely, polling for hotkey presses every 100 milliseconds.
 /// - Ensure that the `workspaces.json` file exists and is writable to preserve state.
-pub fn run_gui(app: App) {
+pub fn run_gui(mut app: App) {
     {
         let mut workspaces = app.workspaces.lock().unwrap();
         let path = app
@@ -111,6 +110,14 @@ pub fn run_gui(app: App) {
             .clone()
             .unwrap_or_else(|| "workspaces.json".to_string());
         *workspaces = load_workspaces(&path, &app);
+    }
+
+    {
+        let bindings_path = app
+            .last_bindings_file
+            .clone()
+            .unwrap_or_else(|| "window_handles.json".to_string());
+        app.attempt_restore_bindings(&bindings_path);
     }
 
     app.validate_initial_hotkeys();
@@ -144,6 +151,40 @@ pub fn run_gui(app: App) {
         Box::new(|_cc| Ok(Box::new(app))),
     )
     .expect("Failed to run GUI");
+}
+
+fn log_binding_stats(path: &str, stats: BindingApplicationStats) {
+    if stats.restored > 0 {
+        info!(
+            "Restored {} window binding{} from '{}'",
+            stats.restored,
+            if stats.restored == 1 { "" } else { "s" },
+            path
+        );
+    } else {
+        info!(
+            "Window bindings loaded from '{}' but no windows were restored.",
+            path
+        );
+    }
+
+    if stats.invalidated > 0 {
+        warn!(
+            "{} binding{} from '{}' referenced invalid handles and were marked for recapture.",
+            stats.invalidated,
+            if stats.invalidated == 1 { "" } else { "s" },
+            path
+        );
+    }
+
+    if stats.unmatched > 0 {
+        warn!(
+            "{} binding{} from '{}' could not be matched to existing workspaces or windows.",
+            stats.unmatched,
+            if stats.unmatched == 1 { "" } else { "s" },
+            path
+        );
+    }
 }
 
 impl EframeApp for App {
@@ -225,6 +266,7 @@ impl EframeApp for App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            last_bindings_file: self.last_bindings_file.clone(),
             developer_debugging: self.developer_debugging,
         });
     }
@@ -258,6 +300,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                last_bindings_file: self.last_bindings_file.clone(),
                                 developer_debugging: self.developer_debugging,
                             });
                             show_message_box("Desktops saved", "Save");
@@ -281,6 +324,7 @@ impl App {
                                 log_level: self.log_level.clone(),
                                 last_layout_file: self.last_layout_file.clone(),
                                 last_workspace_file: self.last_workspace_file.clone(),
+                                last_bindings_file: self.last_bindings_file.clone(),
                                 developer_debugging: self.developer_debugging,
                             });
                             ui.close_menu();
@@ -322,6 +366,40 @@ impl App {
                                 .map(|p| p.to_string_lossy().to_string())
                             {
                                 self.load_workspaces_from_file(&chosen);
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("Save Window Bindings...").clicked() {
+                            let default_path = self
+                                .last_bindings_file
+                                .clone()
+                                .unwrap_or_else(|| "window_handles.json".to_string());
+
+                            if let Some(chosen) = rfd::FileDialog::new()
+                                .set_file_name(&default_path)
+                                .save_file()
+                                .map(|p| p.to_string_lossy().to_string())
+                            {
+                                match self.save_window_bindings_to_file(&chosen) {
+                                    Ok(count) => {
+                                        let message = if count == 0 {
+                                            "No valid window handles were found to save."
+                                                .to_string()
+                                        } else {
+                                            format!(
+                                                "Saved {} window handle{} to '{}'.",
+                                                count,
+                                                if count == 1 { "" } else { "s" },
+                                                chosen
+                                            )
+                                        };
+                                        show_message_box(&message, "Save Window Bindings");
+                                    }
+                                    Err(err) => show_error_box(
+                                        &format!("Failed to save window bindings: {}", err),
+                                        "Save Window Bindings",
+                                    ),
+                                }
                             }
                             ui.close_menu();
                         }
@@ -588,21 +666,41 @@ impl App {
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ui.ctx(), |ui| {
                     ui.label("Press combination then press Enter or click OK");
-                    ui.label(format!("Current: {}", if sequence.is_empty() { "<none>" } else { &sequence }));
+                    ui.label(format!(
+                        "Current: {}",
+                        if sequence.is_empty() {
+                            "<none>"
+                        } else {
+                            &sequence
+                        }
+                    ));
 
                     ui.ctx().input(|i| {
                         for ev in &i.events {
-                            if let egui::Event::Key { key, pressed: true, .. } = ev {
+                            if let egui::Event::Key {
+                                key, pressed: true, ..
+                            } = ev
+                            {
                                 if *key == egui::Key::Escape {
                                     close_dialog = true;
                                 } else if *key == egui::Key::Enter {
-                                    if !sequence.is_empty() { confirm = true; }
+                                    if !sequence.is_empty() {
+                                        confirm = true;
+                                    }
                                 } else {
                                     let mut parts = Vec::new();
-                                    if i.modifiers.ctrl { parts.push("Ctrl"); }
-                                    if i.modifiers.alt { parts.push("Alt"); }
-                                    if i.modifiers.shift { parts.push("Shift"); }
-                                    if i.modifiers.command { parts.push("Win"); }
+                                    if i.modifiers.ctrl {
+                                        parts.push("Ctrl");
+                                    }
+                                    if i.modifiers.alt {
+                                        parts.push("Alt");
+                                    }
+                                    if i.modifiers.shift {
+                                        parts.push("Shift");
+                                    }
+                                    if i.modifiers.command {
+                                        parts.push("Win");
+                                    }
                                     parts.push(key.name());
                                     sequence = parts.join("+");
                                 }
@@ -612,9 +710,13 @@ impl App {
 
                     ui.horizontal(|ui| {
                         if ui.button("OK").clicked() {
-                            if !sequence.is_empty() { confirm = true; }
+                            if !sequence.is_empty() {
+                                confirm = true;
+                            }
                         }
-                        if ui.button("Cancel").clicked() { close_dialog = true; }
+                        if ui.button("Cancel").clicked() {
+                            close_dialog = true;
+                        }
                     });
                 });
 
@@ -678,7 +780,10 @@ impl App {
         let mut changed = false;
         // Workspace disable checkbox
         ui.horizontal(|ui| {
-            if ui.checkbox(&mut workspace.disabled, "Disable Workspace").changed() {
+            if ui
+                .checkbox(&mut workspace.disabled, "Disable Workspace")
+                .changed()
+            {
                 changed = true;
             }
 
@@ -757,8 +862,75 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            last_bindings_file: self.last_bindings_file.clone(),
             developer_debugging: self.developer_debugging,
         });
+    }
+
+    fn save_window_bindings_to_file(&mut self, path: &str) -> Result<usize, WindowBindingError> {
+        let workspaces = self.workspaces.lock().unwrap();
+        let result = save_window_bindings(&workspaces, path);
+        drop(workspaces);
+
+        if result.is_ok() {
+            self.last_bindings_file = Some(path.to_string());
+            save_settings(&Settings {
+                save_on_exit: self.save_on_exit,
+                auto_save: self.auto_save,
+                log_level: self.log_level.clone(),
+                last_layout_file: self.last_layout_file.clone(),
+                last_workspace_file: self.last_workspace_file.clone(),
+                last_bindings_file: self.last_bindings_file.clone(),
+                developer_debugging: self.developer_debugging,
+            });
+        }
+
+        result
+    }
+
+    fn load_and_apply_window_bindings(
+        &mut self,
+        path: &str,
+    ) -> Result<BindingApplicationStats, WindowBindingError> {
+        let bindings = load_window_bindings(path)?;
+        if bindings.is_empty() {
+            return Ok(BindingApplicationStats::default());
+        }
+
+        let stats = {
+            let mut workspaces = self.workspaces.lock().unwrap();
+            apply_window_bindings(&mut workspaces, &bindings)
+        };
+
+        Ok(stats)
+    }
+
+    fn attempt_restore_bindings(&mut self, path: &str) {
+        match self.load_and_apply_window_bindings(path) {
+            Ok(stats) => {
+                if stats == BindingApplicationStats::default() {
+                    debug!(
+                        "Window bindings loaded from '{}' but no entries required updates.",
+                        path
+                    );
+                } else {
+                    log_binding_stats(path, stats);
+                }
+                self.last_bindings_file = Some(path.to_string());
+            }
+            Err(WindowBindingError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!(
+                    "Window bindings file '{}' not found. Skipping automatic restore.",
+                    path
+                );
+                if self.last_bindings_file.is_none() {
+                    self.last_bindings_file = Some(path.to_string());
+                }
+            }
+            Err(err) => {
+                warn!("Failed to load window bindings from '{}': {}", path, err);
+            }
+        }
     }
 
     /// Adds a new workspace to the list of workspaces.
@@ -854,6 +1026,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: None,
                         last_workspace_file: self.last_workspace_file.clone(),
+                        last_bindings_file: self.last_bindings_file.clone(),
                         developer_debugging: self.developer_debugging,
                     });
                 }
@@ -865,10 +1038,12 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        last_bindings_file: self.last_bindings_file.clone(),
                         developer_debugging: self.developer_debugging,
                     });
                 }
-                let dev_response = ui.checkbox(&mut self.developer_debugging, "Developer Debugging");
+                let dev_response =
+                    ui.checkbox(&mut self.developer_debugging, "Developer Debugging");
                 if dev_response.changed() {
                     save_settings(&Settings {
                         save_on_exit: self.save_on_exit,
@@ -876,6 +1051,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        last_bindings_file: self.last_bindings_file.clone(),
                         developer_debugging: self.developer_debugging,
                     });
                 }
@@ -884,7 +1060,10 @@ impl App {
                     .selected_text(&self.log_level)
                     .show_ui(ui, |ui| {
                         for lvl in ["trace", "debug", "info", "warn", "error", "off"] {
-                            if ui.selectable_value(&mut self.log_level, lvl.to_string(), lvl).clicked() {
+                            if ui
+                                .selectable_value(&mut self.log_level, lvl.to_string(), lvl)
+                                .clicked()
+                            {
                                 changed = true;
                             }
                         }
@@ -896,6 +1075,7 @@ impl App {
                         log_level: self.log_level.clone(),
                         last_layout_file: self.last_layout_file.clone(),
                         last_workspace_file: self.last_workspace_file.clone(),
+                        last_bindings_file: self.last_bindings_file.clone(),
                         developer_debugging: self.developer_debugging,
                     });
                 }
@@ -914,6 +1094,27 @@ impl App {
                             log_level: self.log_level.clone(),
                             last_layout_file: self.last_layout_file.clone(),
                             last_workspace_file: self.last_workspace_file.clone(),
+                            last_bindings_file: self.last_bindings_file.clone(),
+                            developer_debugging: self.developer_debugging,
+                        });
+                    }
+                });
+                let mut bindings_path = self.last_bindings_file.clone().unwrap_or_default();
+                ui.horizontal(|ui| {
+                    ui.label("Bindings file:");
+                    if ui.text_edit_singleline(&mut bindings_path).changed() {
+                        if bindings_path.trim().is_empty() {
+                            self.last_bindings_file = None;
+                        } else {
+                            self.last_bindings_file = Some(bindings_path.clone());
+                        }
+                        save_settings(&Settings {
+                            save_on_exit: self.save_on_exit,
+                            auto_save: self.auto_save,
+                            log_level: self.log_level.clone(),
+                            last_layout_file: self.last_layout_file.clone(),
+                            last_workspace_file: self.last_workspace_file.clone(),
+                            last_bindings_file: self.last_bindings_file.clone(),
                             developer_debugging: self.developer_debugging,
                         });
                     }
@@ -1110,7 +1311,14 @@ impl App {
             log_level: self.log_level.clone(),
             last_layout_file: self.last_layout_file.clone(),
             last_workspace_file: self.last_workspace_file.clone(),
+            last_bindings_file: self.last_bindings_file.clone(),
             developer_debugging: self.developer_debugging,
         });
+
+        let bindings_path = self
+            .last_bindings_file
+            .clone()
+            .unwrap_or_else(|| "window_handles.json".to_string());
+        self.attempt_restore_bindings(&bindings_path);
     }
 }

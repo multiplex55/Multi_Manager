@@ -21,6 +21,9 @@ pub struct Settings {
     /// Optional path to the last workspace file used.
     #[serde(default)]
     pub last_workspace_file: Option<String>,
+    /// Optional path to the last saved window bindings file used.
+    #[serde(default)]
+    pub last_bindings_file: Option<String>,
     /// If `true`, additional developer debugging information is shown.
     #[serde(default)]
     pub developer_debugging: bool,
@@ -35,6 +38,7 @@ impl Default for Settings {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            last_bindings_file: None,
             developer_debugging: false,
         }
     }
@@ -59,8 +63,8 @@ pub fn load_settings() -> Settings {
 /// readable format.
 pub fn save_settings(settings: &Settings) {
     if let Ok(json) = serde_json::to_string_pretty(settings) {
-        if let Err(e) = File::create("settings.json")
-            .and_then(|mut file| file.write_all(json.as_bytes()))
+        if let Err(e) =
+            File::create("settings.json").and_then(|mut file| file.write_all(json.as_bytes()))
         {
             eprintln!("Failed to save settings: {}", e);
         }
@@ -93,6 +97,7 @@ mod tests {
             log_level: "debug".to_string(),
             last_layout_file: Some("file.json".into()),
             last_workspace_file: Some("work.json".into()),
+            last_bindings_file: Some("bindings.json".into()),
             developer_debugging: true,
         };
         save_settings(&settings);
@@ -103,6 +108,7 @@ mod tests {
         assert_eq!(loaded.log_level, "debug");
         assert_eq!(loaded.last_layout_file.as_deref(), Some("file.json"));
         assert_eq!(loaded.last_workspace_file.as_deref(), Some("work.json"));
+        assert_eq!(loaded.last_bindings_file.as_deref(), Some("bindings.json"));
         assert_eq!(loaded.developer_debugging, true);
     }
 
@@ -116,6 +122,7 @@ mod tests {
             log_level: "info".to_string(),
             last_layout_file: None,
             last_workspace_file: None,
+            last_bindings_file: None,
             developer_debugging: false,
         };
         save_settings(&settings);
@@ -126,6 +133,7 @@ mod tests {
         assert_eq!(loaded.log_level, "info");
         assert_eq!(loaded.last_layout_file, None);
         assert_eq!(loaded.last_workspace_file, None);
+        assert_eq!(loaded.last_bindings_file, None);
         assert_eq!(loaded.developer_debugging, false);
     }
 }
