@@ -470,7 +470,7 @@ impl App {
                     disabled: false,
                     valid: false,
                     rotate: false,
-                    current_index: 0,
+                    rotation_offset: 0,
                 });
             }
             if ui.button("Send All Home").clicked() {

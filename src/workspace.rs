@@ -38,7 +38,7 @@ pub struct Workspace {
     #[serde(default)]
     pub rotate: bool,
     #[serde(skip)]
-    pub current_index: usize,
+    pub rotation_offset: usize,
 }
 
 impl Workspace {
@@ -204,9 +204,9 @@ impl Workspace {
         let previous_rotate = self.rotate;
         if ui.checkbox(&mut self.rotate, "Rotate Windows").changed() {
             if previous_rotate != self.rotate {
-                self.current_index = 0;
+                self.rotation_offset = 0;
                 debug!(
-                    "Reset current_index for workspace '{}' after rotation toggle.",
+                    "Reset rotation_offset for workspace '{}' after rotation toggle.",
                     self.name
                 );
             }
@@ -833,7 +833,7 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
                                 );
                             }
                         }
-                        workspace.current_index = 0;
+                        workspace.rotation_offset = 0;
                     }
 
                     workspaces

@@ -111,132 +111,57 @@ pub fn are_all_windows_at_home(workspace: &Workspace) -> bool {
 pub fn toggle_workspace_windows(workspace: &mut Workspace) {
     if workspace.rotate && workspace.windows.len() > 1 {
         let len = workspace.windows.len();
-        let target_idx = workspace.current_index % len;
+        let offset = workspace.rotation_offset % len;
 
-        for (i, window) in workspace.windows.iter().enumerate() {
-            let hwnd = HWND(window.id as *mut std::ffi::c_void);
+        let primary_rect = workspace
+            .windows
+            .first()
+            .map(|window| window.target)
+            .unwrap_or((0, 0, 800, 600));
 
-            unsafe {
-                if !IsWindow(hwnd).as_bool() {
-                    warn!("Skipping invalid window '{}'.", window.title);
-                    continue;
+        let slot_rects: Vec<(i32, i32, i32, i32)> =
+            workspace.windows.iter().map(|window| window.home).collect();
+
+        for slot_index in 0..len {
+            let window_index = (slot_index + offset) % len;
+
+            if let Some(window) = workspace.windows.get(window_index) {
+                let hwnd = HWND(window.id as *mut std::ffi::c_void);
+
+                unsafe {
+                    if !IsWindow(hwnd).as_bool() {
+                        warn!("Skipping invalid window '{}'.", window.title);
+                        continue;
+                    }
                 }
-            }
 
-            if i == target_idx {
-                let position = window.target;
+                let rect = if slot_index == 0 {
+                    primary_rect
+                } else {
+                    slot_rects.get(slot_index).copied().unwrap_or(primary_rect)
+                };
 
-                if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
+                if let Err(e) = move_window(hwnd, rect.0, rect.1, rect.2, rect.3) {
                     warn!("Failed to move window '{}': {}", window.title, e);
                 } else {
                     info!(
-                        "Moved window '{}' to position: {:?}",
-                        window.title, position
+                        "Moved window '{}' to slot {} at position: {:?}",
+                        window.title, slot_index, rect
                     );
                 }
 
-                unsafe {
-                    if SetForegroundWindow(hwnd).as_bool() {
-                        info!("Activated window '{}'", window.title);
-                    } else {
-                        warn!("Failed to activate window '{}'", window.title);
-                    }
-                }
-            } else {
-                let home_position = window.home;
-                let target_position = window.target;
-
-                if let Err(e) = move_window(
-                    hwnd,
-                    home_position.0,
-                    home_position.1,
-                    home_position.2,
-                    home_position.3,
-                ) {
-                    warn!("Failed to move window '{}' to home: {}", window.title, e);
-                } else {
-                    info!(
-                        "Moved window '{}' to home position: {:?}",
-                        window.title, home_position
-                    );
-                }
-
-                let at_home = is_window_at_position(
-                    hwnd,
-                    home_position.0,
-                    home_position.1,
-                    home_position.2,
-                    home_position.3,
-                );
-
-                if !at_home {
-                    if is_window_at_position(
-                        hwnd,
-                        target_position.0,
-                        target_position.1,
-                        target_position.2,
-                        target_position.3,
-                    ) {
-                        warn!(
-                            "Window '{}' remained at target after move to home; retrying.",
-                            window.title
-                        );
-                    } else {
-                        warn!(
-                            "Window '{}' not at expected home after move; attempting correction.",
-                            window.title
-                        );
-                    }
-
-                    if let Err(e) = move_window(
-                        hwnd,
-                        home_position.0,
-                        home_position.1,
-                        home_position.2,
-                        home_position.3,
-                    ) {
-                        warn!("Retry to move window '{}' home failed: {}", window.title, e);
-                    } else {
-                        info!(
-                            "Retried moving window '{}' to home position: {:?}",
-                            window.title, home_position
-                        );
-                    }
-
-                    if is_window_at_position(
-                        hwnd,
-                        target_position.0,
-                        target_position.1,
-                        target_position.2,
-                        target_position.3,
-                    ) {
-                        warn!(
-                            "Window '{}' still at target after retry; forcing home move.",
-                            window.title
-                        );
-
-                        if let Err(e) = move_window(
-                            hwnd,
-                            home_position.0,
-                            home_position.1,
-                            home_position.2,
-                            home_position.3,
-                        ) {
-                            warn!(
-                                "Force move to home for window '{}' failed: {}",
-                                window.title, e
-                            );
+                if slot_index == 0 {
+                    unsafe {
+                        if SetForegroundWindow(hwnd).as_bool() {
+                            info!("Activated window '{}'", window.title);
                         } else {
-                            info!(
-                                "Forced window '{}' to home position: {:?}",
-                                window.title, home_position
-                            );
+                            warn!("Failed to activate window '{}'", window.title);
                         }
                     }
                 }
             }
         }
-        workspace.current_index = (workspace.current_index + 1) % len;
+        workspace.rotation_offset = (workspace.rotation_offset + 1) % len;
     } else {
         let all_at_home = are_all_windows_at_home(workspace);
         debug!("all_at_home={}", all_at_home);
