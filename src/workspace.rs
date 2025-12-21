@@ -239,15 +239,34 @@ impl Workspace {
                     // Determine current location if debugging is enabled
                     let debug_info = if app.developer_debugging {
                         let hwnd = HWND(window.id as *mut std::ffi::c_void);
-                        if is_window_at_position(hwnd, window.home.0, window.home.1, window.home.2, window.home.3) {
-                            " home"
-                        } else if is_window_at_position(hwnd, window.target.0, window.target.1, window.target.2, window.target.3) {
-                            " target"
+                        let position_status = if is_window_at_position(
+                            hwnd,
+                            window.home.0,
+                            window.home.1,
+                            window.home.2,
+                            window.home.3,
+                        ) {
+                            "home"
+                        } else if is_window_at_position(
+                            hwnd,
+                            window.target.0,
+                            window.target.1,
+                            window.target.2,
+                            window.target.3,
+                        ) {
+                            "target"
                         } else {
-                            " neither"
-                        }
+                            "neither"
+                        };
+
+                        let position_debug = match get_window_position(hwnd) {
+                            Ok((x, y, w, h)) => format!("({x}, {y}, {w}, {h})"),
+                            Err(_) => "unknown".to_string(),
+                        };
+
+                        format!(" {position_status} {position_debug}")
                     } else {
-                        ""
+                        String::new()
                     };
                     // Define the label and capture its response
                     let label_response = ui.colored_label(
