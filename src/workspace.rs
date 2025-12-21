@@ -325,6 +325,12 @@ impl Workspace {
                                 changed = true;
                             }
 
+                            if ui.button("Swap Home/Target").clicked() {
+                                std::mem::swap(&mut window.home, &mut window.target);
+                                ui.memory_mut(|mem| mem.close_popup());
+                                changed = true;
+                            }
+
                             // Add the "Force Move to Origin" button
                             if ui.button("Force Move to Origin").clicked() {
                                 info!("Force Move to Origin triggered for HWND: {:?}", window.id);
