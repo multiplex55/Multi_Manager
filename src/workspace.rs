@@ -201,7 +201,15 @@ impl Workspace {
             }
         });
 
+        let previous_rotate = self.rotate;
         if ui.checkbox(&mut self.rotate, "Rotate Windows").changed() {
+            if previous_rotate != self.rotate {
+                self.current_index = 0;
+                debug!(
+                    "Reset current_index for workspace '{}' after rotation toggle.",
+                    self.name
+                );
+            }
             changed = true;
         }
 

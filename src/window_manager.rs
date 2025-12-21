@@ -123,27 +123,115 @@ pub fn toggle_workspace_windows(workspace: &mut Workspace) {
                 }
             }
 
-            let position = if i == target_idx {
-                window.target
-            } else {
-                window.home
-            };
-
-            if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
-                warn!("Failed to move window '{}': {}", window.title, e);
-            } else {
-                info!(
-                    "Moved window '{}' to position: {:?}",
-                    window.title, position
-                );
-            }
-
             if i == target_idx {
+                let position = window.target;
+
+                if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
+                    warn!("Failed to move window '{}': {}", window.title, e);
+                } else {
+                    info!(
+                        "Moved window '{}' to position: {:?}",
+                        window.title, position
+                    );
+                }
+
                 unsafe {
                     if SetForegroundWindow(hwnd).as_bool() {
                         info!("Activated window '{}'", window.title);
                     } else {
                         warn!("Failed to activate window '{}'", window.title);
+                    }
+                }
+            } else {
+                let home_position = window.home;
+                let target_position = window.target;
+
+                if let Err(e) = move_window(
+                    hwnd,
+                    home_position.0,
+                    home_position.1,
+                    home_position.2,
+                    home_position.3,
+                ) {
+                    warn!("Failed to move window '{}' to home: {}", window.title, e);
+                } else {
+                    info!(
+                        "Moved window '{}' to home position: {:?}",
+                        window.title, home_position
+                    );
+                }
+
+                let at_home = is_window_at_position(
+                    hwnd,
+                    home_position.0,
+                    home_position.1,
+                    home_position.2,
+                    home_position.3,
+                );
+
+                if !at_home {
+                    if is_window_at_position(
+                        hwnd,
+                        target_position.0,
+                        target_position.1,
+                        target_position.2,
+                        target_position.3,
+                    ) {
+                        warn!(
+                            "Window '{}' remained at target after move to home; retrying.",
+                            window.title
+                        );
+                    } else {
+                        warn!(
+                            "Window '{}' not at expected home after move; attempting correction.",
+                            window.title
+                        );
+                    }
+
+                    if let Err(e) = move_window(
+                        hwnd,
+                        home_position.0,
+                        home_position.1,
+                        home_position.2,
+                        home_position.3,
+                    ) {
+                        warn!("Retry to move window '{}' home failed: {}", window.title, e);
+                    } else {
+                        info!(
+                            "Retried moving window '{}' to home position: {:?}",
+                            window.title, home_position
+                        );
+                    }
+
+                    if is_window_at_position(
+                        hwnd,
+                        target_position.0,
+                        target_position.1,
+                        target_position.2,
+                        target_position.3,
+                    ) {
+                        warn!(
+                            "Window '{}' still at target after retry; forcing home move.",
+                            window.title
+                        );
+
+                        if let Err(e) = move_window(
+                            hwnd,
+                            home_position.0,
+                            home_position.1,
+                            home_position.2,
+                            home_position.3,
+                        ) {
+                            warn!(
+                                "Force move to home for window '{}' failed: {}",
+                                window.title, e
+                            );
+                        } else {
+                            info!(
+                                "Forced window '{}' to home position: {:?}",
+                                window.title, home_position
+                            );
+                        }
                     }
                 }
             }
