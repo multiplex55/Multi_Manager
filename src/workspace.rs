@@ -264,7 +264,10 @@ impl Workspace {
                             Err(_) => "unknown".to_string(),
                         };
 
-                        format!(" {position_status} {position_debug}")
+                        format!(
+                            " | Title: {} | {} {position_debug}",
+                            window.title, position_status
+                        )
                     } else {
                         String::new()
                     };
