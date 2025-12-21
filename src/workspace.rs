@@ -7,7 +7,7 @@ use crate::window_manager::move_window;
 use crate::window_manager::move_window_to_origin;
 use crate::window_manager::*;
 use eframe::egui;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
