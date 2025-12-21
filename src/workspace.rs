@@ -7,7 +7,7 @@ use crate::window_manager::move_window;
 use crate::window_manager::move_window_to_origin;
 use crate::window_manager::*;
 use eframe::egui;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ pub struct Workspace {
     #[serde(default)]
     pub rotate: bool,
     #[serde(skip)]
-    pub current_index: usize,
+    pub rotation_offset: usize,
 }
 
 impl Workspace {
@@ -201,7 +201,15 @@ impl Workspace {
             }
         });
 
+        let previous_rotate = self.rotate;
         if ui.checkbox(&mut self.rotate, "Rotate Windows").changed() {
+            if previous_rotate != self.rotate {
+                self.rotation_offset = 0;
+                debug!(
+                    "Reset rotation_offset for workspace '{}' after rotation toggle.",
+                    self.name
+                );
+            }
             changed = true;
         }
 
@@ -825,7 +833,7 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
                                 );
                             }
                         }
-                        workspace.current_index = 0;
+                        workspace.rotation_offset = 0;
                     }
 
                     workspaces

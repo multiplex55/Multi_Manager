@@ -111,44 +111,57 @@ pub fn are_all_windows_at_home(workspace: &Workspace) -> bool {
 pub fn toggle_workspace_windows(workspace: &mut Workspace) {
     if workspace.rotate && workspace.windows.len() > 1 {
         let len = workspace.windows.len();
-        let target_idx = workspace.current_index % len;
+        let offset = workspace.rotation_offset % len;
 
-        for (i, window) in workspace.windows.iter().enumerate() {
-            let hwnd = HWND(window.id as *mut std::ffi::c_void);
+        let primary_rect = workspace
+            .windows
+            .first()
+            .map(|window| window.target)
+            .unwrap_or((0, 0, 800, 600));
 
-            unsafe {
-                if !IsWindow(hwnd).as_bool() {
-                    warn!("Skipping invalid window '{}'.", window.title);
-                    continue;
-                }
-            }
+        let slot_rects: Vec<(i32, i32, i32, i32)> =
+            workspace.windows.iter().map(|window| window.home).collect();
 
-            let position = if i == target_idx {
-                window.target
-            } else {
-                window.home
-            };
+        for slot_index in 0..len {
+            let window_index = (slot_index + offset) % len;
 
-            if let Err(e) = move_window(hwnd, position.0, position.1, position.2, position.3) {
-                warn!("Failed to move window '{}': {}", window.title, e);
-            } else {
-                info!(
-                    "Moved window '{}' to position: {:?}",
-                    window.title, position
-                );
-            }
+            if let Some(window) = workspace.windows.get(window_index) {
+                let hwnd = HWND(window.id as *mut std::ffi::c_void);
 
-            if i == target_idx {
                 unsafe {
-                    if SetForegroundWindow(hwnd).as_bool() {
-                        info!("Activated window '{}'", window.title);
-                    } else {
-                        warn!("Failed to activate window '{}'", window.title);
+                    if !IsWindow(hwnd).as_bool() {
+                        warn!("Skipping invalid window '{}'.", window.title);
+                        continue;
+                    }
+                }
+
+                let rect = if slot_index == 0 {
+                    primary_rect
+                } else {
+                    slot_rects.get(slot_index).copied().unwrap_or(primary_rect)
+                };
+
+                if let Err(e) = move_window(hwnd, rect.0, rect.1, rect.2, rect.3) {
+                    warn!("Failed to move window '{}': {}", window.title, e);
+                } else {
+                    info!(
+                        "Moved window '{}' to slot {} at position: {:?}",
+                        window.title, slot_index, rect
+                    );
+                }
+
+                if slot_index == 0 {
+                    unsafe {
+                        if SetForegroundWindow(hwnd).as_bool() {
+                            info!("Activated window '{}'", window.title);
+                        } else {
+                            warn!("Failed to activate window '{}'", window.title);
+                        }
                     }
                 }
             }
         }
-        workspace.current_index = (workspace.current_index + 1) % len;
+        workspace.rotation_offset = (workspace.rotation_offset + 1) % len;
     } else {
         let all_at_home = are_all_windows_at_home(workspace);
         debug!("all_at_home={}", all_at_home);

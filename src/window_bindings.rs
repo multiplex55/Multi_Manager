@@ -171,25 +171,25 @@ pub fn apply_window_bindings(
         let workspace = &mut workspaces[workspace_idx];
 
         for window_binding in &binding.windows {
-            let mut target_index = None;
-
-            if window_binding.window_index < workspace.windows.len() {
-                target_index = Some(window_binding.window_index);
+            let target_index = if window_binding.window_index < workspace.windows.len() {
+                let mut index = Some(window_binding.window_index);
 
                 if workspace.windows[window_binding.window_index].title
                     != window_binding.window_title
                 {
-                    target_index = workspace
+                    index = workspace
                         .windows
                         .iter()
                         .position(|w| w.title == window_binding.window_title);
                 }
+
+                index
             } else {
-                target_index = workspace
+                workspace
                     .windows
                     .iter()
-                    .position(|w| w.title == window_binding.window_title);
-            }
+                    .position(|w| w.title == window_binding.window_title)
+            };
 
             let Some(index) = target_index else {
                 stats.unmatched += 1;
