@@ -373,11 +373,10 @@ impl Workspace {
                         .desired_width(200.0),
                 );
                 if response.changed() {
-                    let trimmed = alias_text.trim();
-                    window.alias = if trimmed.is_empty() {
+                    window.alias = if alias_text.trim().is_empty() {
                         None
                     } else {
-                        Some(trimmed.to_string())
+                        Some(alias_text.clone())
                     };
                     changed = true;
                 }
@@ -1065,5 +1064,23 @@ mod tests {
 
         with_alias.alias = None;
         assert_eq!(with_alias.display_label(), "Window Title (no alias)");
+
+        let mut with_trailing_space = Window {
+            id: 3,
+            title: "Keep Spaces".to_string(),
+            alias: Some("Alias With Space ".to_string()),
+            home: (0, 0, 100, 100),
+            target: (0, 0, 100, 100),
+            valid: true,
+        };
+        assert_eq!(with_trailing_space.display_label(), "Alias With Space ");
+        with_trailing_space.alias = Some("   ".to_string());
+        assert_eq!(
+            with_trailing_space
+                .alias
+                .as_deref()
+                .filter(|alias| !alias.trim().is_empty()),
+            None
+        );
     }
 }
