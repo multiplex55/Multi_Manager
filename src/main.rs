@@ -1,4 +1,4 @@
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![windows_subsystem = "windows"]
 
 mod desktop_window_info;
 mod gui;
