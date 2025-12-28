@@ -223,7 +223,7 @@ impl Workspace {
         for (i, window) in windows.into_iter().enumerate() {
             ui.horizontal(|ui| {
                 // Display window title or alias
-                ui.label(window.display_name());
+                ui.label(window.display_label());
 
                 if i > 0 && ui.button("Move ⏶").clicked() {
                     move_up_index = Some(i);
@@ -273,8 +273,8 @@ impl Workspace {
                         };
 
                         format!(
-                            " | Title: {} | {} {position_debug}",
-                            window.display_name(),
+                            " | Name: {} | {} {position_debug}",
+                            window.display_label(),
                             position_status
                         )
                     } else {
@@ -302,7 +302,7 @@ impl Workspace {
                         &label_response, // Pass the label_response here
                         egui::PopupCloseBehavior::CloseOnClickOutside, // Auto-close on outside click
                         |ui| {
-                            ui.label("Options:");
+                            ui.label(format!("Options for {}:", window.display_label()));
 
                             // Add the "Force Recapture" button
                             if ui.button("Force Recapture").clicked() {
@@ -315,7 +315,7 @@ impl Workspace {
                                             window.sync_alias_from_title_if_missing();
                                             info!(
                                                 "Force Recaptured window '{}', new HWND: {:?}",
-                                                window.title, new_hwnd
+                                                window.display_label(), new_hwnd
                                             );
                                     } else {
                                         warn!("Force Recapture canceled or no active window detected.");
@@ -354,7 +354,7 @@ impl Workspace {
                             window.sync_alias_from_title_if_missing();
                             info!(
                                 "Recaptured window '{}', new HWND: {:?}",
-                                window.title, new_hwnd
+                                window.display_label(), new_hwnd
                                 );
                             changed = true;
                         } else {
@@ -365,9 +365,14 @@ impl Workspace {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label("Alias:");
-                let mut alias_text = window.alias.clone().unwrap_or_else(|| window.title.clone());
-                if ui.text_edit_singleline(&mut alias_text).changed() {
+                ui.label("Alias (optional):");
+                let mut alias_text = window.alias.clone().unwrap_or_default();
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut alias_text)
+                        .hint_text(window.title.clone())
+                        .desired_width(200.0),
+                );
+                if response.changed() {
                     let trimmed = alias_text.trim();
                     window.alias = if trimmed.is_empty() {
                         None
@@ -401,11 +406,10 @@ impl Workspace {
         if ui.button("Capture Active Window").clicked() {
             if let Some(("Enter", hwnd, title)) = listen_for_keys_with_dialog_and_window() {
                 let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
-                let captured_title = title.clone();
                 self.windows.push(Window {
                     id: hwnd.0 as usize,
                     title,
-                    alias: Some(captured_title),
+                    alias: None,
                     home: rect,
                     target: rect,
                     valid: true,
@@ -710,14 +714,20 @@ impl Window {
             .unwrap_or(&self.title)
     }
 
+    pub fn display_label(&self) -> String {
+        match self.alias.as_deref() {
+            Some(alias) if !alias.is_empty() => alias.to_string(),
+            _ => format!("{} (no alias)", self.title),
+        }
+    }
+
     pub fn sync_alias_from_title_if_missing(&mut self) {
         if self
             .alias
             .as_deref()
-            .map(|alias| alias.is_empty())
-            .unwrap_or(true)
+            .is_some_and(|alias| alias.trim().is_empty())
         {
-            self.alias = Some(self.title.clone());
+            self.alias = None;
         }
     }
 }
@@ -1028,5 +1038,32 @@ mod tests {
         assert_eq!(window.display_name(), "Legacy Window");
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn display_label_shows_alias_or_cue() {
+        let mut with_alias = Window {
+            id: 1,
+            title: "Window Title".to_string(),
+            alias: Some("Alias Name".to_string()),
+            home: (0, 0, 100, 100),
+            target: (0, 0, 100, 100),
+            valid: true,
+        };
+
+        let without_alias = Window {
+            id: 2,
+            title: "Fallback Title".to_string(),
+            alias: None,
+            home: (0, 0, 100, 100),
+            target: (0, 0, 100, 100),
+            valid: true,
+        };
+
+        assert_eq!(with_alias.display_label(), "Alias Name");
+        assert_eq!(without_alias.display_label(), "Fallback Title (no alias)");
+
+        with_alias.alias = None;
+        assert_eq!(with_alias.display_label(), "Window Title (no alias)");
     }
 }
