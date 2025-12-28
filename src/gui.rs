@@ -1198,18 +1198,18 @@ impl App {
         }
 
         if let Some(&(ws_idx, win_idx)) = self.recapture_queue.first() {
-            let (ws_name, win_title) = {
+            let (ws_name, win_label) = {
                 let workspaces = self.workspaces.lock().unwrap();
                 let ws_name = workspaces
                     .get(ws_idx)
                     .map(|w| w.name.clone())
                     .unwrap_or_default();
-                let win_title = workspaces
+                let win_label = workspaces
                     .get(ws_idx)
                     .and_then(|w| w.windows.get(win_idx))
-                    .map(|w| w.title.clone())
-                    .unwrap_or_default();
-                (ws_name, win_title)
+                    .map(|w| w.display_label())
+                    .unwrap_or_else(|| "Unknown window (no alias)".to_string());
+                (ws_name, win_label)
             };
 
             egui::Window::new("Recapture All")
@@ -1219,7 +1219,7 @@ impl App {
                 .show(ctx, |ui| {
                     ui.label(format!(
                         "Recapturing workspace '{}' window '{}'",
-                        ws_name, win_title
+                        ws_name, win_label
                     ));
                     ui.label("Focus the desired window and press Enter to capture, 'S' to skip, or Esc to cancel.");
                 });
