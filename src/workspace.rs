@@ -222,8 +222,8 @@ impl Workspace {
 
         for (i, window) in windows.into_iter().enumerate() {
             ui.horizontal(|ui| {
-                // Display window title
-                ui.label(&window.title);
+                // Display window title or alias
+                ui.label(window.display_name());
 
                 if i > 0 && ui.button("Move ⏶").clicked() {
                     move_up_index = Some(i);
@@ -274,7 +274,8 @@ impl Workspace {
 
                         format!(
                             " | Title: {} | {} {position_debug}",
-                            window.title, position_status
+                            window.display_name(),
+                            position_status
                         )
                     } else {
                         String::new()
@@ -307,14 +308,15 @@ impl Workspace {
                             if ui.button("Force Recapture").clicked() {
                                 info!("Force Recapture triggered for HWND: {:?}", window.id);
                                 if let Some("Enter") = listen_for_keys_with_dialog() {
-                                    if let Some((new_hwnd, new_title)) = get_active_window() {
-                                        // Update the HWND and title
-                                        window.id = new_hwnd.0 as usize;
-                                        window.title = new_title;
-                                        info!(
-                                            "Force Recaptured window '{}', new HWND: {:?}",
-                                            window.title, new_hwnd
-                                        );
+                                        if let Some((new_hwnd, new_title)) = get_active_window() {
+                                            // Update the HWND and title
+                                            window.id = new_hwnd.0 as usize;
+                                            window.title = new_title;
+                                            window.sync_alias_from_title_if_missing();
+                                            info!(
+                                                "Force Recaptured window '{}', new HWND: {:?}",
+                                                window.title, new_hwnd
+                                            );
                                     } else {
                                         warn!("Force Recapture canceled or no active window detected.");
                                     }
@@ -349,6 +351,7 @@ impl Workspace {
                             // Update the invalid window with the new HWND but retain home/target
                             window.id = new_hwnd.0 as usize;
                             window.title = new_title;
+                            window.sync_alias_from_title_if_missing();
                             info!(
                                 "Recaptured window '{}', new HWND: {:?}",
                                 window.title, new_hwnd
@@ -359,6 +362,19 @@ impl Workspace {
                         }
                     }
                 }
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("Alias:");
+                let mut alias_text = window.alias.clone().unwrap_or_else(|| window.title.clone());
+                if ui.text_edit_singleline(&mut alias_text).changed() {
+                    let trimmed = alias_text.trim();
+                    window.alias = if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    };
+                    changed = true;
                 }
             });
             // Render controls for individual window
@@ -385,9 +401,11 @@ impl Workspace {
         if ui.button("Capture Active Window").clicked() {
             if let Some(("Enter", hwnd, title)) = listen_for_keys_with_dialog_and_window() {
                 let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
+                let captured_title = title.clone();
                 self.windows.push(Window {
                     id: hwnd.0 as usize,
                     title,
+                    alias: Some(captured_title),
                     home: rect,
                     target: rect,
                     valid: true,
@@ -499,6 +517,7 @@ impl Workspace {
     pub fn validate_workspace(&mut self) {
         let mut any_valid_window = false;
         for window in self.windows.iter_mut() {
+            window.sync_alias_from_title_if_missing();
             let hwnd = HWND(window.id as *mut c_void);
             let is_valid = unsafe { IsWindow(hwnd).as_bool() };
             window.valid = is_valid;
@@ -676,9 +695,31 @@ pub fn render_window_controls(ui: &mut egui::Ui, window: &mut Window, changed: &
 pub struct Window {
     pub id: usize,
     pub title: String,
+    #[serde(default)]
+    pub alias: Option<String>,
     pub home: (i32, i32, i32, i32),
     pub target: (i32, i32, i32, i32),
     pub valid: bool,
+}
+
+impl Window {
+    pub fn display_name(&self) -> &str {
+        self.alias
+            .as_deref()
+            .filter(|alias| !alias.is_empty())
+            .unwrap_or(&self.title)
+    }
+
+    pub fn sync_alias_from_title_if_missing(&mut self) {
+        if self
+            .alias
+            .as_deref()
+            .map(|alias| alias.is_empty())
+            .unwrap_or(true)
+        {
+            self.alias = Some(self.title.clone());
+        }
+    }
 }
 
 /// Checks whether the provided `input` string (e.g., `"Ctrl+Alt+F5"`, `"Win+Shift+Z"`) matches a valid hotkey pattern.
@@ -860,5 +901,132 @@ pub fn load_workspaces(file_path: &str, app: &App) -> Vec<Workspace> {
             );
             Vec::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gui::App;
+    use poll_promise::Promise;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use std::time::SystemTime;
+
+    fn temp_json_path(suffix: &str) -> String {
+        let mut path = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        path.push(format!(
+            "multi_manager_workspace_test_{}_{}_{}.json",
+            suffix,
+            std::process::id(),
+            timestamp
+        ));
+        path.to_string_lossy().to_string()
+    }
+
+    fn test_app() -> App {
+        App {
+            app_title_name: "Test".to_string(),
+            workspaces: Arc::new(Mutex::new(Vec::new())),
+            last_hotkey_info: Arc::new(Mutex::new(None)),
+            hotkey_promise: Arc::new(Mutex::new(None::<Promise<()>>)),
+            initial_validation_done: Arc::new(Mutex::new(false)),
+            registered_hotkeys: Arc::new(Mutex::new(HashMap::new())),
+            rename_dialog: None,
+            hotkey_dialog: None,
+            all_expanded: false,
+            expand_all_signal: None,
+            show_settings: false,
+            auto_save: false,
+            unsaved_changes: false,
+            save_on_exit: false,
+            log_level: "info".to_string(),
+            last_layout_file: None,
+            last_workspace_file: None,
+            last_bindings_file: None,
+            developer_debugging: false,
+            recapture_queue: Vec::new(),
+            recapture_active: false,
+        }
+    }
+
+    #[test]
+    fn save_and_load_preserves_alias() {
+        let path = temp_json_path("alias_preserve");
+        let alias = "Alias Window".to_string();
+        let window_title = "Original Window".to_string();
+        let workspaces = vec![Workspace {
+            name: "Workspace 1".to_string(),
+            hotkey: None,
+            windows: vec![Window {
+                id: 1,
+                title: window_title.clone(),
+                alias: Some(alias.clone()),
+                home: (0, 0, 800, 600),
+                target: (100, 100, 800, 600),
+                valid: true,
+            }],
+            disabled: false,
+            valid: true,
+            rotate: false,
+            rotation_offset: 0,
+        }];
+
+        save_workspaces(&workspaces, &path);
+        let file_content =
+            std::fs::read_to_string(&path).expect("workspace file should be written");
+        assert!(
+            file_content.contains(&alias),
+            "Serialized workspaces should include the alias string"
+        );
+        assert!(
+            file_content.contains("alias"),
+            "Serialized workspaces should include the alias field"
+        );
+
+        let loaded = load_workspaces(&path, &test_app());
+        assert_eq!(loaded[0].windows[0].alias.as_deref(), Some(alias.as_str()));
+        assert_eq!(loaded[0].windows[0].title, window_title);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn legacy_files_without_alias_deserialize() {
+        let path = temp_json_path("legacy");
+        let legacy_json = r#"
+        [
+            {
+                "name": "Legacy Workspace",
+                "hotkey": null,
+                "windows": [
+                    {
+                        "id": 1,
+                        "title": "Legacy Window",
+                        "home": [0, 0, 100, 100],
+                        "target": [0, 0, 100, 100],
+                        "valid": true
+                    }
+                ],
+                "disabled": false,
+                "valid": true,
+                "rotate": false
+            }
+        ]
+        "#;
+        std::fs::write(&path, legacy_json).expect("should write legacy json");
+
+        let loaded = load_workspaces(&path, &test_app());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].windows.len(), 1);
+        let window = &loaded[0].windows[0];
+        assert!(window.alias.is_none());
+        assert_eq!(window.display_name(), "Legacy Window");
+
+        let _ = std::fs::remove_file(&path);
     }
 }
