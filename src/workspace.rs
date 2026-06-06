@@ -1,8 +1,7 @@
-use crate::gui::App;
+use crate::gui::{App, PendingCaptureAction};
 use crate::hotkey::Hotkey;
 use crate::window_manager::get_window_position;
 use crate::window_manager::is_window_at_position;
-use crate::window_manager::listen_for_keys_with_dialog_and_window;
 use crate::window_manager::move_window;
 use crate::window_manager::move_window_to_origin;
 use crate::window_manager::*;
@@ -146,9 +145,15 @@ impl Workspace {
     ///
     /// The `app` reference is required so that the hotkey can be unregistered
     /// when resetting it back to the default state.
-    pub fn render_details(&mut self, ui: &mut egui::Ui, app: &App) -> (bool, bool) {
+    pub fn render_details(
+        &mut self,
+        ui: &mut egui::Ui,
+        app: &App,
+        workspace_index: usize,
+    ) -> (bool, bool, Option<PendingCaptureAction>) {
         let mut changed = false;
         let mut open_dialog = false;
+        let mut pending_capture_action = None;
         // Hotkey section
         ui.horizontal(|ui| {
             ui.label("Hotkey:");
@@ -307,24 +312,34 @@ impl Workspace {
                             // Add the "Force Recapture" button
                             if ui.button("Force Recapture").clicked() {
                                 info!("Force Recapture triggered for HWND: {:?}", window.id);
-                                if let Some("Enter") = listen_for_keys_with_dialog() {
+                                if app.show_force_recapture_prompt {
+                                    if let Some("Enter") = listen_for_keys_with_dialog() {
                                         if let Some((new_hwnd, new_title)) = get_active_window() {
                                             // Update the HWND and title
                                             window.id = new_hwnd.0 as usize;
                                             window.title = new_title;
+                                            window.valid = true;
                                             window.sync_alias_from_title_if_missing();
                                             info!(
                                                 "Force Recaptured window '{}', new HWND: {:?}",
                                                 window.display_label(), new_hwnd
                                             );
-                                    } else {
-                                        warn!("Force Recapture canceled or no active window detected.");
+                                            changed = true;
+                                        } else {
+                                            warn!("Force Recapture canceled or no active window detected.");
+                                        }
                                     }
+                                } else {
+                                    pending_capture_action = Some(
+                                        PendingCaptureAction::ForceRecaptureWindow {
+                                            workspace_index,
+                                            window_index: i,
+                                        },
+                                    );
                                 }
 
                                 // Explicitly close the popup after the action
                                 ui.memory_mut(|mem| mem.close_popup());
-                                changed = true;
                             }
 
                             if ui.button("Swap Home/Target").clicked() {
@@ -346,20 +361,30 @@ impl Workspace {
         } else {
                 ui.colored_label(egui::Color32::RED, format!("HWND: {:?}", window.id));
                 if ui.button("Recapture").clicked() {
-                    if let Some("Enter") = listen_for_keys_with_dialog() {
-                        if let Some((new_hwnd, new_title)) = get_active_window() {
-                            // Update the invalid window with the new HWND but retain home/target
-                            window.id = new_hwnd.0 as usize;
-                            window.title = new_title;
-                            window.sync_alias_from_title_if_missing();
-                            info!(
-                                "Recaptured window '{}', new HWND: {:?}",
-                                window.display_label(), new_hwnd
-                                );
-                            changed = true;
-                        } else {
-                            warn!("Recapture canceled or no active window detected.");
+                    if app.show_force_recapture_prompt {
+                        if let Some("Enter") = listen_for_keys_with_dialog() {
+                            if let Some((new_hwnd, new_title)) = get_active_window() {
+                                // Update the invalid window with the new HWND but retain home/target
+                                window.id = new_hwnd.0 as usize;
+                                window.title = new_title;
+                                window.valid = true;
+                                window.sync_alias_from_title_if_missing();
+                                info!(
+                                    "Recaptured window '{}', new HWND: {:?}",
+                                    window.display_label(), new_hwnd
+                                    );
+                                changed = true;
+                            } else {
+                                warn!("Recapture canceled or no active window detected.");
+                            }
                         }
+                    } else {
+                        pending_capture_action = Some(
+                            PendingCaptureAction::RecaptureInvalidWindow {
+                                workspace_index,
+                                window_index: i,
+                            },
+                        );
                     }
                 }
                 }
@@ -403,21 +428,26 @@ impl Workspace {
 
         // Capture active window button
         if ui.button("Capture Active Window").clicked() {
-            if let Some(("Enter", hwnd, title)) = listen_for_keys_with_dialog_and_window() {
-                let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
-                self.windows.push(Window {
-                    id: hwnd.0 as usize,
-                    title,
-                    alias: None,
-                    home: rect,
-                    target: rect,
-                    valid: true,
-                });
-                changed = true;
+            if app.show_force_recapture_prompt {
+                if let Some(("Enter", hwnd, title)) = listen_for_keys_with_dialog_and_window() {
+                    let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
+                    self.windows.push(Window {
+                        id: hwnd.0 as usize,
+                        title,
+                        alias: None,
+                        home: rect,
+                        target: rect,
+                        valid: true,
+                    });
+                    changed = true;
+                }
+            } else {
+                pending_capture_action =
+                    Some(PendingCaptureAction::CaptureActiveWindow { workspace_index });
             }
         }
 
-        (changed, open_dialog)
+        (changed, open_dialog, pending_capture_action)
     }
 
     /// Attaches a context menu to a UI widget.
@@ -959,6 +989,7 @@ mod tests {
             last_bindings_file: None,
             developer_debugging: false,
             show_force_recapture_prompt: false,
+            pending_capture_action: None,
             recapture_queue: Vec::new(),
             recapture_active: false,
         }

@@ -5,8 +5,9 @@ use crate::window_bindings::{
     WindowBindingError,
 };
 use crate::window_manager::{
-    capture_all_desktops, check_hotkeys, get_active_window, move_all_to_origin,
-    poll_recapture_keys, restore_all_desktops, send_all_windows_home, RecaptureAction,
+    capture_all_desktops, check_hotkeys, get_active_window, get_window_position,
+    move_all_to_origin, poll_recapture_keys, restore_all_desktops, send_all_windows_home,
+    RecaptureAction,
 };
 use crate::workspace::*;
 use eframe::egui::ViewportBuilder;
@@ -15,7 +16,6 @@ use eframe::NativeOptions;
 use eframe::{self, App as EframeApp};
 use log::{debug, info, warn};
 use poll_promise::Promise;
-use rfd::FileDialog;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
@@ -23,6 +23,21 @@ use std::thread;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PendingCaptureAction {
+    ForceRecaptureWindow {
+        workspace_index: usize,
+        window_index: usize,
+    },
+    RecaptureInvalidWindow {
+        workspace_index: usize,
+        window_index: usize,
+    },
+    CaptureActiveWindow {
+        workspace_index: usize,
+    },
+}
 
 #[derive(Clone)]
 pub struct App {
@@ -46,8 +61,16 @@ pub struct App {
     pub last_bindings_file: Option<String>,
     pub developer_debugging: bool,
     pub show_force_recapture_prompt: bool,
+    pub pending_capture_action: Option<PendingCaptureAction>,
     pub recapture_queue: Vec<(usize, usize)>,
     pub recapture_active: bool,
+}
+
+pub fn pending_indicator_visible(
+    show_force_recapture_prompt: bool,
+    pending_capture_action: &Option<PendingCaptureAction>,
+) -> bool {
+    !show_force_recapture_prompt && pending_capture_action.is_some()
 }
 
 pub struct WorkspaceControlContext<'a> {
@@ -56,6 +79,20 @@ pub struct WorkspaceControlContext<'a> {
     pub move_down_index: &'a mut Option<usize>,
     pub workspaces_len: usize,
     pub index: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{pending_indicator_visible, PendingCaptureAction};
+
+    #[test]
+    fn pending_indicator_visible_only_for_pending_promptless_capture() {
+        let action = Some(PendingCaptureAction::CaptureActiveWindow { workspace_index: 0 });
+
+        assert!(pending_indicator_visible(false, &action));
+        assert!(!pending_indicator_visible(true, &action));
+        assert!(!pending_indicator_visible(false, &None));
+    }
 }
 
 //
@@ -238,6 +275,10 @@ impl EframeApp for App {
             self.process_recapture_all(ctx);
         }
 
+        if self.pending_capture_action.is_some() {
+            self.process_pending_capture(ctx);
+        }
+
         if save_flag {
             self.save_workspaces();
         }
@@ -266,6 +307,90 @@ impl EframeApp for App {
 }
 
 impl App {
+    pub fn start_pending_capture(&mut self, action: PendingCaptureAction) {
+        self.pending_capture_action = Some(action);
+        let _ = poll_recapture_keys();
+    }
+
+    pub fn cancel_pending_capture(&mut self) {
+        self.pending_capture_action = None;
+        let _ = poll_recapture_keys();
+    }
+
+    pub fn is_waiting_for_manual_capture(&self) -> bool {
+        pending_indicator_visible(
+            self.show_force_recapture_prompt,
+            &self.pending_capture_action,
+        )
+    }
+
+    fn process_pending_capture(&mut self, ctx: &egui::Context) {
+        let Some(action) = self.pending_capture_action.clone() else {
+            return;
+        };
+
+        if let Some(recapture_action) = poll_recapture_keys() {
+            match recapture_action {
+                RecaptureAction::Confirm => {
+                    self.confirm_pending_capture(action);
+                    self.pending_capture_action = None;
+                    let _ = poll_recapture_keys();
+                }
+                RecaptureAction::Cancel => self.cancel_pending_capture(),
+                RecaptureAction::Skip => {}
+            }
+        }
+
+        ctx.request_repaint();
+    }
+
+    fn confirm_pending_capture(&mut self, action: PendingCaptureAction) {
+        match action {
+            PendingCaptureAction::ForceRecaptureWindow {
+                workspace_index,
+                window_index,
+            }
+            | PendingCaptureAction::RecaptureInvalidWindow {
+                workspace_index,
+                window_index,
+            } => {
+                if let Some((new_hwnd, new_title)) = get_active_window() {
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    if let Some(workspace) = workspaces.get_mut(workspace_index) {
+                        if let Some(window) = workspace.windows.get_mut(window_index) {
+                            window.id = new_hwnd.0 as usize;
+                            window.title = new_title;
+                            window.valid = true;
+                            window.sync_alias_from_title_if_missing();
+                            self.unsaved_changes = true;
+                        }
+                    }
+                } else {
+                    warn!("Pending capture confirmed, but no active window was detected.");
+                }
+            }
+            PendingCaptureAction::CaptureActiveWindow { workspace_index } => {
+                if let Some((hwnd, title)) = get_active_window() {
+                    let rect = get_window_position(hwnd).unwrap_or((0, 0, 800, 600));
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    if let Some(workspace) = workspaces.get_mut(workspace_index) {
+                        workspace.windows.push(Window {
+                            id: hwnd.0 as usize,
+                            title,
+                            alias: None,
+                            home: rect,
+                            target: rect,
+                            valid: true,
+                        });
+                        self.unsaved_changes = true;
+                    }
+                } else {
+                    warn!("Pending capture confirmed, but no active window was detected.");
+                }
+            }
+        }
+    }
+
     fn current_settings(&self) -> Settings {
         Settings {
             save_on_exit: self.save_on_exit,
@@ -453,7 +578,15 @@ impl App {
         _save_flag: &mut bool,
         new_workspace: &mut Option<Workspace>,
     ) {
-        ui.heading(&self.app_title_name);
+        ui.horizontal(|ui| {
+            ui.heading(&self.app_title_name);
+            if self.is_waiting_for_manual_capture() {
+                ui.colored_label(
+                    egui::Color32::BLUE,
+                    "Waiting for force recapture: Enter to confirm, Esc to cancel",
+                );
+            }
+        });
         ui.horizontal(|ui| {
             if ui.button("Add New Workspace").clicked() {
                 let workspaces = self.workspaces.lock().unwrap();
@@ -520,6 +653,7 @@ impl App {
 
         let mut any_changed = false;
         let mut requested_hotkey: Option<usize> = None;
+        let mut pending_capture_action: Option<PendingCaptureAction> = None;
         egui::ScrollArea::both()
             .auto_shrink([false; 2])
             .show(ui, |ui| {
@@ -552,12 +686,16 @@ impl App {
                             });
                         })
                         .body(|ui| {
-                            let (changed, open_dialog) = workspace.render_details(ui, self);
+                            let (changed, open_dialog, pending_action) =
+                                workspace.render_details(ui, self, i);
                             if changed {
                                 any_changed = true;
                             }
                             if open_dialog {
                                 requested_hotkey = Some(i);
+                            }
+                            if pending_capture_action.is_none() {
+                                pending_capture_action = pending_action;
                             }
 
                             let mut context = WorkspaceControlContext {
@@ -584,6 +722,10 @@ impl App {
             });
         if any_changed {
             self.unsaved_changes = true;
+        }
+
+        if let Some(action) = pending_capture_action {
+            self.start_pending_capture(action);
         }
 
         // Reset expand_all_signal after use
