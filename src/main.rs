@@ -162,6 +162,7 @@ fn main() {
         last_workspace_file: settings.last_workspace_file.clone(),
         last_bindings_file: settings.last_bindings_file.clone(),
         developer_debugging: settings.developer_debugging,
+        show_force_recapture_prompt: settings.show_force_recapture_prompt,
         recapture_queue: Vec::new(),
         recapture_active: false,
     };

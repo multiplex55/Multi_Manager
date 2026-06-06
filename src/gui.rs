@@ -45,6 +45,7 @@ pub struct App {
     pub last_workspace_file: Option<String>,
     pub last_bindings_file: Option<String>,
     pub developer_debugging: bool,
+    pub show_force_recapture_prompt: bool,
     pub recapture_queue: Vec<(usize, usize)>,
     pub recapture_active: bool,
 }
@@ -260,7 +261,13 @@ impl EframeApp for App {
         if self.save_on_exit {
             self.save_workspaces();
         }
-        save_settings(&Settings {
+        self.persist_settings();
+    }
+}
+
+impl App {
+    fn current_settings(&self) -> Settings {
+        Settings {
             save_on_exit: self.save_on_exit,
             auto_save: self.auto_save,
             log_level: self.log_level.clone(),
@@ -268,11 +275,14 @@ impl EframeApp for App {
             last_workspace_file: self.last_workspace_file.clone(),
             last_bindings_file: self.last_bindings_file.clone(),
             developer_debugging: self.developer_debugging,
-        });
+            show_force_recapture_prompt: self.show_force_recapture_prompt,
+        }
     }
-}
 
-impl App {
+    fn persist_settings(&self) {
+        save_settings(&self.current_settings());
+    }
+
     /// Renders the application's menu bar with a "File" menu.
     ///
     /// The menu contains a single "Settings" item that sets
@@ -294,15 +304,7 @@ impl App {
                                 .unwrap_or(default_path);
                             capture_all_desktops(&chosen);
                             self.last_layout_file = Some(chosen.clone());
-                            save_settings(&Settings {
-                                save_on_exit: self.save_on_exit,
-                                auto_save: self.auto_save,
-                                log_level: self.log_level.clone(),
-                                last_layout_file: self.last_layout_file.clone(),
-                                last_workspace_file: self.last_workspace_file.clone(),
-                                last_bindings_file: self.last_bindings_file.clone(),
-                                developer_debugging: self.developer_debugging,
-                            });
+                            self.persist_settings();
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
                         }
@@ -318,15 +320,7 @@ impl App {
                                 .unwrap_or(default_path);
                             restore_all_desktops(&chosen);
                             self.last_layout_file = Some(chosen.clone());
-                            save_settings(&Settings {
-                                save_on_exit: self.save_on_exit,
-                                auto_save: self.auto_save,
-                                log_level: self.log_level.clone(),
-                                last_layout_file: self.last_layout_file.clone(),
-                                last_workspace_file: self.last_workspace_file.clone(),
-                                last_bindings_file: self.last_bindings_file.clone(),
-                                developer_debugging: self.developer_debugging,
-                            });
+                            self.persist_settings();
                             ui.close_menu();
                         }
                         if ui.button("Move All to Origin").clicked() {
@@ -853,18 +847,11 @@ impl App {
     pub fn save_workspaces_to_file(&mut self, path: &str) {
         let workspaces = self.workspaces.lock().unwrap();
         save_workspaces(&workspaces, path);
+        drop(workspaces);
         self.last_workspace_file = Some(path.to_string());
         self.unsaved_changes = false;
         info!("Workspaces saved successfully.");
-        save_settings(&Settings {
-            save_on_exit: self.save_on_exit,
-            auto_save: self.auto_save,
-            log_level: self.log_level.clone(),
-            last_layout_file: self.last_layout_file.clone(),
-            last_workspace_file: self.last_workspace_file.clone(),
-            last_bindings_file: self.last_bindings_file.clone(),
-            developer_debugging: self.developer_debugging,
-        });
+        self.persist_settings();
     }
 
     fn save_window_bindings_to_file(&mut self, path: &str) -> Result<usize, WindowBindingError> {
@@ -874,15 +861,7 @@ impl App {
 
         if result.is_ok() {
             self.last_bindings_file = Some(path.to_string());
-            save_settings(&Settings {
-                save_on_exit: self.save_on_exit,
-                auto_save: self.auto_save,
-                log_level: self.log_level.clone(),
-                last_layout_file: self.last_layout_file.clone(),
-                last_workspace_file: self.last_workspace_file.clone(),
-                last_bindings_file: self.last_bindings_file.clone(),
-                developer_debugging: self.developer_debugging,
-            });
+            self.persist_settings();
         }
 
         result
@@ -1020,40 +999,16 @@ impl App {
             .show(ctx, |ui| {
                 let response = ui.checkbox(&mut self.save_on_exit, "Save on exit");
                 if response.changed() {
-                    save_settings(&Settings {
-                        save_on_exit: self.save_on_exit,
-                        auto_save: self.auto_save,
-                        log_level: self.log_level.clone(),
-                        last_layout_file: None,
-                        last_workspace_file: self.last_workspace_file.clone(),
-                        last_bindings_file: self.last_bindings_file.clone(),
-                        developer_debugging: self.developer_debugging,
-                    });
+                    self.persist_settings();
                 }
                 let auto_response = ui.checkbox(&mut self.auto_save, "Auto-save");
                 if auto_response.changed() {
-                    save_settings(&Settings {
-                        save_on_exit: self.save_on_exit,
-                        auto_save: self.auto_save,
-                        log_level: self.log_level.clone(),
-                        last_layout_file: self.last_layout_file.clone(),
-                        last_workspace_file: self.last_workspace_file.clone(),
-                        last_bindings_file: self.last_bindings_file.clone(),
-                        developer_debugging: self.developer_debugging,
-                    });
+                    self.persist_settings();
                 }
                 let dev_response =
                     ui.checkbox(&mut self.developer_debugging, "Developer Debugging");
                 if dev_response.changed() {
-                    save_settings(&Settings {
-                        save_on_exit: self.save_on_exit,
-                        auto_save: self.auto_save,
-                        log_level: self.log_level.clone(),
-                        last_layout_file: self.last_layout_file.clone(),
-                        last_workspace_file: self.last_workspace_file.clone(),
-                        last_bindings_file: self.last_bindings_file.clone(),
-                        developer_debugging: self.developer_debugging,
-                    });
+                    self.persist_settings();
                 }
                 let mut changed = false;
                 egui::ComboBox::from_label("Log Level")
@@ -1069,15 +1024,7 @@ impl App {
                         }
                     });
                 if changed {
-                    save_settings(&Settings {
-                        save_on_exit: self.save_on_exit,
-                        auto_save: self.auto_save,
-                        log_level: self.log_level.clone(),
-                        last_layout_file: self.last_layout_file.clone(),
-                        last_workspace_file: self.last_workspace_file.clone(),
-                        last_bindings_file: self.last_bindings_file.clone(),
-                        developer_debugging: self.developer_debugging,
-                    });
+                    self.persist_settings();
                 }
                 let mut path = self.last_layout_file.clone().unwrap_or_default();
                 ui.horizontal(|ui| {
@@ -1088,15 +1035,7 @@ impl App {
                         } else {
                             self.last_layout_file = Some(path.clone());
                         }
-                        save_settings(&Settings {
-                            save_on_exit: self.save_on_exit,
-                            auto_save: self.auto_save,
-                            log_level: self.log_level.clone(),
-                            last_layout_file: self.last_layout_file.clone(),
-                            last_workspace_file: self.last_workspace_file.clone(),
-                            last_bindings_file: self.last_bindings_file.clone(),
-                            developer_debugging: self.developer_debugging,
-                        });
+                        self.persist_settings();
                     }
                 });
                 let mut bindings_path = self.last_bindings_file.clone().unwrap_or_default();
@@ -1108,15 +1047,7 @@ impl App {
                         } else {
                             self.last_bindings_file = Some(bindings_path.clone());
                         }
-                        save_settings(&Settings {
-                            save_on_exit: self.save_on_exit,
-                            auto_save: self.auto_save,
-                            log_level: self.log_level.clone(),
-                            last_layout_file: self.last_layout_file.clone(),
-                            last_workspace_file: self.last_workspace_file.clone(),
-                            last_bindings_file: self.last_bindings_file.clone(),
-                            developer_debugging: self.developer_debugging,
-                        });
+                        self.persist_settings();
                     }
                 });
                 if ui.button("Close").clicked() {
@@ -1305,15 +1236,7 @@ impl App {
 
         self.last_workspace_file = Some(path.to_string());
         self.unsaved_changes = false;
-        save_settings(&Settings {
-            save_on_exit: self.save_on_exit,
-            auto_save: self.auto_save,
-            log_level: self.log_level.clone(),
-            last_layout_file: self.last_layout_file.clone(),
-            last_workspace_file: self.last_workspace_file.clone(),
-            last_bindings_file: self.last_bindings_file.clone(),
-            developer_debugging: self.developer_debugging,
-        });
+        self.persist_settings();
 
         let bindings_path = self
             .last_bindings_file
