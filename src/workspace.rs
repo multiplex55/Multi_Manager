@@ -1,4 +1,4 @@
-use crate::gui::{App, PendingCaptureAction};
+use crate::gui::App;
 use crate::hotkey::Hotkey;
 use crate::window_manager::get_window_position;
 use crate::window_manager::is_window_at_position;
@@ -19,6 +19,22 @@ use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 static HOTKEY_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(?:(?:Ctrl|Alt|Shift|Win)\+)?(?:(?:Ctrl|Alt|Shift|Win)\+)?(?:(?:Ctrl|Alt|Shift|Win)\+)?(?:(?:Ctrl|Alt|Shift|Win)\+)?(?:F(?:[1-9]|1[0-2]|1[3-9]|2[0-4])|[A-Z]|[0-9]|NUMPAD[0-9]|NUMPAD(?:MULTIPLY|ADD|SEPARATOR|SUBTRACT|DOT|DIVIDE)|UP|DOWN|LEFT|RIGHT|BACKSPACE|TAB|ENTER|PAUSE|CAPSLOCK|ESCAPE|SPACE|PAGEUP|PAGEDOWN|END|HOME|INSERT|DELETE|OEM_(?:PLUS|COMMA|MINUS|PERIOD|[1-7])|PRINTSCREEN|SCROLLLOCK|NUMLOCK|LEFT(?:SHIFT|CTRL|ALT)|RIGHT(?:SHIFT|CTRL|ALT))$").unwrap()
 });
+
+/// Commands emitted by workspace UI controls for the application to handle after rendering.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorkspaceUiCommand {
+    StartForceRecapture {
+        workspace_index: usize,
+        window_index: usize,
+    },
+    StartInvalidRecapture {
+        workspace_index: usize,
+        window_index: usize,
+    },
+    StartCaptureActiveWindow {
+        workspace_index: usize,
+    },
+}
 
 /// Represents a workspace, which groups multiple windows and allows toggling between specific positions.
 ///
@@ -150,10 +166,10 @@ impl Workspace {
         ui: &mut egui::Ui,
         app: &App,
         workspace_index: usize,
-    ) -> (bool, bool, Option<PendingCaptureAction>) {
+    ) -> (bool, bool, Vec<WorkspaceUiCommand>) {
         let mut changed = false;
         let mut open_dialog = false;
-        let mut pending_capture_action = None;
+        let mut commands = Vec::new();
         // Hotkey section
         ui.horizontal(|ui| {
             ui.label("Hotkey:");
@@ -330,12 +346,10 @@ impl Workspace {
                                         }
                                     }
                                 } else {
-                                    pending_capture_action = Some(
-                                        PendingCaptureAction::ForceRecaptureWindow {
-                                            workspace_index,
-                                            window_index: i,
-                                        },
-                                    );
+                                    commands.push(WorkspaceUiCommand::StartForceRecapture {
+                                        workspace_index,
+                                        window_index: i,
+                                    });
                                 }
 
                                 // Explicitly close the popup after the action
@@ -379,12 +393,10 @@ impl Workspace {
                             }
                         }
                     } else {
-                        pending_capture_action = Some(
-                            PendingCaptureAction::RecaptureInvalidWindow {
-                                workspace_index,
-                                window_index: i,
-                            },
-                        );
+                        commands.push(WorkspaceUiCommand::StartInvalidRecapture {
+                            workspace_index,
+                            window_index: i,
+                        });
                     }
                 }
                 }
@@ -442,12 +454,11 @@ impl Workspace {
                     changed = true;
                 }
             } else {
-                pending_capture_action =
-                    Some(PendingCaptureAction::CaptureActiveWindow { workspace_index });
+                commands.push(WorkspaceUiCommand::StartCaptureActiveWindow { workspace_index });
             }
         }
 
-        (changed, open_dialog, pending_capture_action)
+        (changed, open_dialog, commands)
     }
 
     /// Attaches a context menu to a UI widget.

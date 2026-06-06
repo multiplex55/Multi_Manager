@@ -312,6 +312,24 @@ impl App {
         let _ = poll_recapture_keys();
     }
 
+    pub fn start_force_recapture(&mut self, workspace_index: usize, window_index: usize) {
+        self.start_pending_capture(PendingCaptureAction::ForceRecaptureWindow {
+            workspace_index,
+            window_index,
+        });
+    }
+
+    pub fn start_invalid_recapture(&mut self, workspace_index: usize, window_index: usize) {
+        self.start_pending_capture(PendingCaptureAction::RecaptureInvalidWindow {
+            workspace_index,
+            window_index,
+        });
+    }
+
+    pub fn start_capture_active_window(&mut self, workspace_index: usize) {
+        self.start_pending_capture(PendingCaptureAction::CaptureActiveWindow { workspace_index });
+    }
+
     pub fn cancel_pending_capture(&mut self) {
         self.pending_capture_action = None;
         let _ = poll_recapture_keys();
@@ -653,7 +671,7 @@ impl App {
 
         let mut any_changed = false;
         let mut requested_hotkey: Option<usize> = None;
-        let mut pending_capture_action: Option<PendingCaptureAction> = None;
+        let mut workspace_commands = Vec::new();
         egui::ScrollArea::both()
             .auto_shrink([false; 2])
             .show(ui, |ui| {
@@ -686,7 +704,7 @@ impl App {
                             });
                         })
                         .body(|ui| {
-                            let (changed, open_dialog, pending_action) =
+                            let (changed, open_dialog, commands) =
                                 workspace.render_details(ui, self, i);
                             if changed {
                                 any_changed = true;
@@ -694,9 +712,7 @@ impl App {
                             if open_dialog {
                                 requested_hotkey = Some(i);
                             }
-                            if pending_capture_action.is_none() {
-                                pending_capture_action = pending_action;
-                            }
+                            workspace_commands.extend(commands);
 
                             let mut context = WorkspaceControlContext {
                                 workspace_to_delete,
@@ -724,8 +740,20 @@ impl App {
             self.unsaved_changes = true;
         }
 
-        if let Some(action) = pending_capture_action {
-            self.start_pending_capture(action);
+        for command in workspace_commands {
+            match command {
+                WorkspaceUiCommand::StartForceRecapture {
+                    workspace_index,
+                    window_index,
+                } => self.start_force_recapture(workspace_index, window_index),
+                WorkspaceUiCommand::StartInvalidRecapture {
+                    workspace_index,
+                    window_index,
+                } => self.start_invalid_recapture(workspace_index, window_index),
+                WorkspaceUiCommand::StartCaptureActiveWindow { workspace_index } => {
+                    self.start_capture_active_window(workspace_index);
+                }
+            }
         }
 
         // Reset expand_all_signal after use
