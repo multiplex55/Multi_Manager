@@ -1010,6 +1010,17 @@ impl App {
                 if dev_response.changed() {
                     self.persist_settings();
                 }
+                let force_recapture_prompt_response = ui
+                    .checkbox(
+                        &mut self.show_force_recapture_prompt,
+                        "Show force recapture confirmation prompt",
+                    )
+                    .on_hover_text(
+                        "When disabled, recapture starts immediately and listens globally for Enter to confirm or Escape to cancel.",
+                    );
+                if force_recapture_prompt_response.changed() {
+                    self.persist_settings();
+                }
                 let mut changed = false;
                 egui::ComboBox::from_label("Log Level")
                     .selected_text(&self.log_level)
