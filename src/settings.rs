@@ -27,6 +27,13 @@ pub struct Settings {
     /// If `true`, additional developer debugging information is shown.
     #[serde(default)]
     pub developer_debugging: bool,
+    /// If `true`, the user should be prompted before forced recapture actions.
+    #[serde(default = "default_show_force_recapture_prompt")]
+    pub show_force_recapture_prompt: bool,
+}
+
+fn default_show_force_recapture_prompt() -> bool {
+    false
 }
 
 impl Default for Settings {
@@ -40,6 +47,7 @@ impl Default for Settings {
             last_workspace_file: None,
             last_bindings_file: None,
             developer_debugging: false,
+            show_force_recapture_prompt: false,
         }
     }
 }
@@ -99,6 +107,7 @@ mod tests {
             last_workspace_file: Some("work.json".into()),
             last_bindings_file: Some("bindings.json".into()),
             developer_debugging: true,
+            show_force_recapture_prompt: true,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -110,6 +119,7 @@ mod tests {
         assert_eq!(loaded.last_workspace_file.as_deref(), Some("work.json"));
         assert_eq!(loaded.last_bindings_file.as_deref(), Some("bindings.json"));
         assert_eq!(loaded.developer_debugging, true);
+        assert_eq!(loaded.show_force_recapture_prompt, true);
     }
 
     #[test]
@@ -124,6 +134,7 @@ mod tests {
             last_workspace_file: None,
             last_bindings_file: None,
             developer_debugging: false,
+            show_force_recapture_prompt: false,
         };
         save_settings(&settings);
         let loaded = load_settings();
@@ -135,5 +146,6 @@ mod tests {
         assert_eq!(loaded.last_workspace_file, None);
         assert_eq!(loaded.last_bindings_file, None);
         assert_eq!(loaded.developer_debugging, false);
+        assert_eq!(loaded.show_force_recapture_prompt, false);
     }
 }

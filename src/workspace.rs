@@ -958,6 +958,7 @@ mod tests {
             last_workspace_file: None,
             last_bindings_file: None,
             developer_debugging: false,
+            show_force_recapture_prompt: false,
             recapture_queue: Vec::new(),
             recapture_active: false,
         }
