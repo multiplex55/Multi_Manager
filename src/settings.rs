@@ -148,4 +148,28 @@ mod tests {
         assert_eq!(loaded.developer_debugging, false);
         assert_eq!(loaded.show_force_recapture_prompt, false);
     }
+
+    #[test]
+    fn missing_force_recapture_prompt_defaults_to_false() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        cleanup();
+        fs::write(
+            "settings.json",
+            r#"{
+  "save_on_exit": false,
+  "auto_save": false,
+  "log_level": "info",
+  "last_layout_file": null,
+  "last_workspace_file": null,
+  "last_bindings_file": null,
+  "developer_debugging": false
+}"#,
+        )
+        .unwrap();
+
+        let loaded = load_settings();
+        cleanup();
+
+        assert_eq!(loaded.show_force_recapture_prompt, false);
+    }
 }
