@@ -81,9 +81,49 @@ pub struct WorkspaceControlContext<'a> {
     pub index: usize,
 }
 
+#[cfg(not(test))]
+fn clear_recapture_key_state() {
+    let _ = poll_recapture_keys();
+}
+
+#[cfg(test)]
+fn clear_recapture_key_state() {}
+
 #[cfg(test)]
 mod tests {
-    use super::{pending_indicator_visible, PendingCaptureAction};
+    use super::{pending_indicator_visible, App, PendingCaptureAction};
+    use crate::workspace::Workspace;
+    use poll_promise::Promise;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    fn test_app() -> App {
+        App {
+            app_title_name: "Multi Manager".to_string(),
+            workspaces: Arc::new(Mutex::new(Vec::<Workspace>::new())),
+            last_hotkey_info: Arc::new(Mutex::new(None)),
+            hotkey_promise: Arc::new(Mutex::new(None::<Promise<()>>)),
+            initial_validation_done: Arc::new(Mutex::new(false)),
+            registered_hotkeys: Arc::new(Mutex::new(HashMap::new())),
+            rename_dialog: None,
+            hotkey_dialog: None,
+            all_expanded: false,
+            expand_all_signal: None,
+            show_settings: false,
+            auto_save: false,
+            unsaved_changes: false,
+            save_on_exit: false,
+            log_level: "info".to_string(),
+            last_layout_file: None,
+            last_workspace_file: None,
+            last_bindings_file: None,
+            developer_debugging: false,
+            show_force_recapture_prompt: false,
+            pending_capture_action: None,
+            recapture_queue: Vec::new(),
+            recapture_active: false,
+        }
+    }
 
     #[test]
     fn pending_indicator_visible_only_for_pending_promptless_capture() {
@@ -92,6 +132,30 @@ mod tests {
         assert!(pending_indicator_visible(false, &action));
         assert!(!pending_indicator_visible(true, &action));
         assert!(!pending_indicator_visible(false, &None));
+    }
+
+    #[test]
+    fn start_pending_capture_sets_pending_capture_action() {
+        let mut app = test_app();
+        let action = PendingCaptureAction::ForceRecaptureWindow {
+            workspace_index: 1,
+            window_index: 2,
+        };
+
+        app.start_pending_capture(action.clone());
+
+        assert_eq!(app.pending_capture_action, Some(action));
+    }
+
+    #[test]
+    fn cancel_pending_capture_clears_pending_capture_action() {
+        let mut app = test_app();
+        app.pending_capture_action =
+            Some(PendingCaptureAction::CaptureActiveWindow { workspace_index: 3 });
+
+        app.cancel_pending_capture();
+
+        assert_eq!(app.pending_capture_action, None);
     }
 }
 
@@ -317,7 +381,7 @@ impl EframeApp for App {
 impl App {
     pub fn start_pending_capture(&mut self, action: PendingCaptureAction) {
         self.pending_capture_action = Some(action);
-        let _ = poll_recapture_keys();
+        clear_recapture_key_state();
     }
 
     pub fn start_force_recapture(&mut self, workspace_index: usize, window_index: usize) {
@@ -340,7 +404,7 @@ impl App {
 
     pub fn cancel_pending_capture(&mut self) {
         self.pending_capture_action = None;
-        let _ = poll_recapture_keys();
+        clear_recapture_key_state();
     }
 
     pub fn is_waiting_for_manual_capture(&self) -> bool {
