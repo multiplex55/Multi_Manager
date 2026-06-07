@@ -92,7 +92,7 @@ fn clear_recapture_key_state() {}
 #[cfg(test)]
 mod tests {
     use super::{pending_indicator_visible, App, PendingCaptureAction};
-    use crate::workspace::Workspace;
+    use crate::workspace::{Window, Workspace};
     use poll_promise::Promise;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -156,6 +156,34 @@ mod tests {
         app.cancel_pending_capture();
 
         assert_eq!(app.pending_capture_action, None);
+    }
+
+    #[test]
+    fn start_recapture_all_does_not_start_during_pending_capture() {
+        let mut app = test_app();
+        app.workspaces.lock().unwrap().push(Workspace {
+            name: "Workspace 1".to_string(),
+            hotkey: None,
+            windows: vec![Window {
+                id: 1,
+                title: "Window 1".to_string(),
+                alias: None,
+                home: (0, 0, 100, 100),
+                target: (0, 0, 100, 100),
+                valid: true,
+            }],
+            disabled: false,
+            valid: true,
+            rotate: false,
+            rotation_offset: 0,
+        });
+        app.pending_capture_action =
+            Some(PendingCaptureAction::CaptureActiveWindow { workspace_index: 0 });
+
+        app.start_recapture_all();
+
+        assert!(!app.recapture_active);
+        assert!(app.recapture_queue.is_empty());
     }
 }
 
@@ -753,73 +781,83 @@ impl App {
         let mut move_up_index: Option<usize> = None;
         let mut move_down_index: Option<usize> = None;
 
+        let capture_pending = self.pending_capture_action.is_some();
         let mut any_changed = false;
         let mut requested_hotkey: Option<usize> = None;
         let mut workspace_commands = Vec::new();
-        egui::ScrollArea::both()
-            .auto_shrink([false; 2])
-            .show(ui, |ui| {
-                let mut workspaces = self.workspaces.lock().unwrap();
-                let workspaces_len = workspaces.len();
+        ui.add_enabled_ui(!capture_pending, |ui| {
+            egui::ScrollArea::both()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    let mut workspaces = self.workspaces.lock().unwrap();
+                    let workspaces_len = workspaces.len();
 
-                for (i, workspace) in workspaces.iter_mut().enumerate() {
-                    workspace.validate_workspace();
-                    let header_text = workspace.get_header_text();
-                    let header_id = egui::Id::new(format!("workspace_{}_header", i));
+                    for (i, workspace) in workspaces.iter_mut().enumerate() {
+                        workspace.validate_workspace();
+                        let header_text = workspace.get_header_text();
+                        let header_id = egui::Id::new(format!("workspace_{}_header", i));
 
-                    let mut state =
-                        egui::collapsing_header::CollapsingState::load_with_default_open(
-                            ui.ctx(),
-                            header_id,
-                            true,
-                        );
-                    if let Some(expand) = self.expand_all_signal {
-                        state.set_open(expand);
-                    }
+                        let mut state =
+                            egui::collapsing_header::CollapsingState::load_with_default_open(
+                                ui.ctx(),
+                                header_id,
+                                true,
+                            );
+                        if let Some(expand) = self.expand_all_signal {
+                            state.set_open(expand);
+                        }
 
-                    let (_toggle_response, header_inner, _) = state
-                        .show_header(ui, |ui| {
-                            let label_response = ui.label(header_text);
-                            label_response.context_menu(|ui| {
-                                if ui.button("Rename").clicked() {
-                                    self.rename_dialog = Some((i, workspace.name.clone()));
-                                    ui.close_menu();
+                        let (_toggle_response, header_inner, _) = state
+                            .show_header(ui, |ui| {
+                                let label_response = ui.label(header_text);
+                                label_response.context_menu(|ui| {
+                                    if ui.button("Rename").clicked() {
+                                        self.rename_dialog = Some((i, workspace.name.clone()));
+                                        ui.close_menu();
+                                    }
+                                });
+                            })
+                            .body(|ui| {
+                                let (changed, open_dialog, commands) =
+                                    workspace.render_details(ui, self, i);
+                                if changed {
+                                    any_changed = true;
+                                }
+                                if open_dialog {
+                                    requested_hotkey = Some(i);
+                                }
+                                workspace_commands.extend(commands);
+
+                                let mut context = WorkspaceControlContext {
+                                    workspace_to_delete,
+                                    move_up_index: &mut move_up_index,
+                                    move_down_index: &mut move_down_index,
+                                    workspaces_len,
+                                    index: i,
+                                };
+
+                                if self.render_workspace_controls(ui, workspace, &mut context) {
+                                    any_changed = true;
                                 }
                             });
-                        })
-                        .body(|ui| {
-                            let (changed, open_dialog, commands) =
-                                workspace.render_details(ui, self, i);
-                            if changed {
-                                any_changed = true;
-                            }
-                            if open_dialog {
-                                requested_hotkey = Some(i);
-                            }
-                            workspace_commands.extend(commands);
 
-                            let mut context = WorkspaceControlContext {
-                                workspace_to_delete,
-                                move_up_index: &mut move_up_index,
-                                move_down_index: &mut move_down_index,
-                                workspaces_len,
-                                index: i,
-                            };
-
-                            if self.render_workspace_controls(ui, workspace, &mut context) {
-                                any_changed = true;
+                        // Attach right-click context menu to the header for renaming
+                        header_inner.response.context_menu(|ui| {
+                            if ui.button("Rename").clicked() {
+                                self.rename_dialog = Some((i, workspace.name.clone()));
+                                ui.close_menu();
                             }
                         });
-
-                    // Attach right-click context menu to the header for renaming
-                    header_inner.response.context_menu(|ui| {
-                        if ui.button("Rename").clicked() {
-                            self.rename_dialog = Some((i, workspace.name.clone()));
-                            ui.close_menu();
-                        }
-                    });
-                }
-            });
+                    }
+                });
+        });
+        if capture_pending {
+            workspace_commands.clear();
+            requested_hotkey = None;
+            move_up_index = None;
+            move_down_index = None;
+            any_changed = false;
+        }
         if any_changed {
             self.unsaved_changes = true;
         }
