@@ -959,6 +959,10 @@ pub fn listen_for_keys_with_dialog() -> Option<&'static str> {
 /// - This function is central to the application’s hotkey-based workspace toggling.
 /// - Must be invoked repeatedly (e.g., via a timed loop) to capture newly pressed keys.
 pub fn check_hotkeys(app: &App) {
+    if app.pending_capture_action.is_some() || app.recapture_active {
+        return;
+    }
+
     let mut workspaces_to_toggle = Vec::new();
     let workspaces = app.workspaces.lock().unwrap();
 

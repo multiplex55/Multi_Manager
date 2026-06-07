@@ -265,10 +265,18 @@ impl EframeApp for App {
 
         self.render_menu_bar(ctx);
 
+        let capture_pending = self.pending_capture_action.is_some();
+
         egui::CentralPanel::default().show(ctx, |ui| {
             self.render_header(ui, &mut save_flag, &mut new_workspace);
             ui.separator();
-            self.render_workspace_list(ui, &mut workspace_to_delete);
+            if capture_pending {
+                ui.add_enabled_ui(false, |ui| {
+                    self.render_workspace_list(ui, &mut workspace_to_delete);
+                });
+            } else {
+                self.render_workspace_list(ui, &mut workspace_to_delete);
+            }
         });
 
         if self.recapture_active {
@@ -431,6 +439,8 @@ impl App {
     /// The menu contains a single "Settings" item that sets
     /// `self.show_settings` to `true` when selected.
     fn render_menu_bar(&mut self, ctx: &egui::Context) {
+        let capture_pending = self.pending_capture_action.is_some();
+
         TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -451,25 +461,27 @@ impl App {
                             show_message_box("Desktops saved", "Save");
                             ui.close_menu();
                         }
-                        if ui.button("Restore All Desktops").clicked() {
-                            let default_path = self
-                                .last_layout_file
-                                .clone()
-                                .unwrap_or_else(|| "desktop_layout.json".to_string());
-                            let chosen = rfd::FileDialog::new()
-                                .set_file_name(&default_path)
-                                .pick_file()
-                                .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or(default_path);
-                            restore_all_desktops(&chosen);
-                            self.last_layout_file = Some(chosen.clone());
-                            self.persist_settings();
-                            ui.close_menu();
-                        }
-                        if ui.button("Move All to Origin").clicked() {
-                            move_all_to_origin();
-                            ui.close_menu();
-                        }
+                        ui.add_enabled_ui(!capture_pending, |ui| {
+                            if ui.button("Restore All Desktops").clicked() {
+                                let default_path = self
+                                    .last_layout_file
+                                    .clone()
+                                    .unwrap_or_else(|| "desktop_layout.json".to_string());
+                                let chosen = rfd::FileDialog::new()
+                                    .set_file_name(&default_path)
+                                    .pick_file()
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or(default_path);
+                                restore_all_desktops(&chosen);
+                                self.last_layout_file = Some(chosen.clone());
+                                self.persist_settings();
+                                ui.close_menu();
+                            }
+                            if ui.button("Move All to Origin").clicked() {
+                                move_all_to_origin();
+                                ui.close_menu();
+                            }
+                        });
                     });
                     ui.menu_button("Workspace Management", |ui| {
                         if ui.button("Save Workspaces...").clicked() {
@@ -492,20 +504,22 @@ impl App {
                             }
                             ui.close_menu();
                         }
-                        if ui.button("Load Workspaces...").clicked() {
-                            let default_path = self
-                                .last_workspace_file
-                                .clone()
-                                .unwrap_or_else(|| "workspaces.json".to_string());
-                            if let Some(chosen) = rfd::FileDialog::new()
-                                .set_file_name(&default_path)
-                                .pick_file()
-                                .map(|p| p.to_string_lossy().to_string())
-                            {
-                                self.load_workspaces_from_file(&chosen);
+                        ui.add_enabled_ui(!capture_pending, |ui| {
+                            if ui.button("Load Workspaces...").clicked() {
+                                let default_path = self
+                                    .last_workspace_file
+                                    .clone()
+                                    .unwrap_or_else(|| "workspaces.json".to_string());
+                                if let Some(chosen) = rfd::FileDialog::new()
+                                    .set_file_name(&default_path)
+                                    .pick_file()
+                                    .map(|p| p.to_string_lossy().to_string())
+                                {
+                                    self.load_workspaces_from_file(&chosen);
+                                }
+                                ui.close_menu();
                             }
-                            ui.close_menu();
-                        }
+                        });
                         if ui.button("Save Window Bindings...").clicked() {
                             let default_path = self
                                 .last_bindings_file
@@ -545,10 +559,12 @@ impl App {
                         self.open_log_folder();
                         ui.close_menu();
                     }
-                    if ui.button("Recapture All").clicked() {
-                        self.start_recapture_all();
-                        ui.close_menu();
-                    }
+                    ui.add_enabled_ui(!capture_pending, |ui| {
+                        if ui.button("Recapture All").clicked() {
+                            self.start_recapture_all();
+                            ui.close_menu();
+                        }
+                    });
                     if ui.button("Settings").clicked() {
                         self.show_settings = true;
                         ui.close_menu();
@@ -605,31 +621,35 @@ impl App {
                 );
             }
         });
+        let capture_pending = self.pending_capture_action.is_some();
+
         ui.horizontal(|ui| {
-            if ui.button("Add New Workspace").clicked() {
-                let workspaces = self.workspaces.lock().unwrap();
-                *new_workspace = Some(Workspace {
-                    name: format!("Workspace {}", workspaces.len() + 1),
-                    hotkey: None,
-                    windows: Vec::new(),
-                    disabled: false,
-                    valid: false,
-                    rotate: false,
-                    rotation_offset: 0,
-                });
-            }
-            if ui.button("Send All Home").clicked() {
-                self.send_all_home();
-            }
-            let label = if self.all_expanded {
-                "Collapse All"
-            } else {
-                "Expand All"
-            };
-            if ui.button(label).clicked() {
-                self.all_expanded = !self.all_expanded;
-                self.expand_all_signal = Some(self.all_expanded);
-            }
+            ui.add_enabled_ui(!capture_pending, |ui| {
+                if ui.button("Add New Workspace").clicked() {
+                    let workspaces = self.workspaces.lock().unwrap();
+                    *new_workspace = Some(Workspace {
+                        name: format!("Workspace {}", workspaces.len() + 1),
+                        hotkey: None,
+                        windows: Vec::new(),
+                        disabled: false,
+                        valid: false,
+                        rotate: false,
+                        rotation_offset: 0,
+                    });
+                }
+                if ui.button("Send All Home").clicked() {
+                    self.send_all_home();
+                }
+                let label = if self.all_expanded {
+                    "Collapse All"
+                } else {
+                    "Expand All"
+                };
+                if ui.button(label).clicked() {
+                    self.all_expanded = !self.all_expanded;
+                    self.expand_all_signal = Some(self.all_expanded);
+                }
+            });
         });
     }
     /// Renders the list of workspaces in the application's GUI.
@@ -740,6 +760,10 @@ impl App {
             self.unsaved_changes = true;
         }
 
+        if self.recapture_active {
+            workspace_commands.clear();
+        }
+
         for command in workspace_commands {
             match command {
                 WorkspaceUiCommand::StartForceRecapture {
@@ -761,6 +785,7 @@ impl App {
 
         // Move workspace up/down if requested
         if let Some(i) = move_up_index {
+            self.cancel_pending_capture();
             let mut workspaces = self.workspaces.lock().unwrap();
             if i > 0 {
                 workspaces.swap(i, i - 1);
@@ -768,6 +793,7 @@ impl App {
             }
         }
         if let Some(i) = move_down_index {
+            self.cancel_pending_capture();
             let mut workspaces = self.workspaces.lock().unwrap();
             if i < workspaces.len() - 1 {
                 workspaces.swap(i, i + 1);
@@ -1113,6 +1139,7 @@ impl App {
     /// - The function does not perform any validation or registration of hotkeys for the new workspace.
     /// - Any changes made to the workspace list are not persisted to disk until `save_workspaces` is called.
     fn add_workspace(&mut self, workspace: Workspace) {
+        self.cancel_pending_capture();
         let mut workspaces = self.workspaces.lock().unwrap();
         workspaces.push(workspace);
         self.unsaved_changes = true;
@@ -1146,6 +1173,7 @@ impl App {
     /// # Error Conditions
     /// - Panics if the `index` is greater than or equal to the length of the `workspaces` list.
     fn delete_workspace(&mut self, index: usize) {
+        self.cancel_pending_capture();
         let mut workspaces = self.workspaces.lock().unwrap();
         if let Some(workspace) = workspaces.get_mut(index) {
             if let Some(ref hotkey) = workspace.hotkey {
@@ -1290,6 +1318,10 @@ impl App {
 
     /// Begin recapturing all windows across every workspace.
     fn start_recapture_all(&mut self) {
+        if self.pending_capture_action.is_some() {
+            return;
+        }
+
         self.recapture_queue.clear();
         let workspaces = self.workspaces.lock().unwrap();
         for (wi, ws) in workspaces.iter().enumerate() {
@@ -1401,6 +1433,8 @@ impl App {
 
     /// Load workspaces from the specified file, replacing current ones.
     pub fn load_workspaces_from_file(&mut self, path: &str) {
+        self.cancel_pending_capture();
+
         {
             let mut workspaces = self.workspaces.lock().unwrap();
             for ws in workspaces.iter_mut() {
